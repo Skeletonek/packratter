@@ -18,6 +18,7 @@ export default [
       ...tseslint.configs.recommended.rules,
       ...tseslint.configs['recommended-type-checked'].rules,
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+      '@typescript-eslint/require-await': 'off',
       'no-console': 'off',
     },
   },

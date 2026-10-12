@@ -9,8 +9,12 @@
     "node": ">=22.0.0"
   },
   "scripts": {
-    "dev": "tsx watch src/index.ts",
-    "build": "tsc && cp -r src/db/migrations dist/db/migrations",
+    "dev": "tsx watch --env-file=.env src/index.ts",
+    "dev:ui": "cd ui && vite dev",
+    "dev:all": "concurrently --names=server,ui --kill-others \"pnpm dev\" \"pnpm dev:ui\"",
+    "build:server": "tsc && cp -r src/db/migrations dist/db/migrations",
+    "build:ui": "cd ui && svelte-kit sync && vite build",
+    "build": "pnpm build:server && pnpm build:ui",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
@@ -23,16 +27,24 @@
     "argon2": "^0.45.1",
     "drizzle-orm": "^1.0.0-rc.4",
     "fastify": "^5.12.5",
+    "p-queue": "^9.3.4",
     "zod": "^4.6.6"
   },
   "devDependencies": {
+    "@sveltejs/adapter-static": "^4.0.0",
+    "@sveltejs/kit": "^2.70.3",
+    "@sveltejs/vite-plugin-svelte": "^7.3.1",
     "@types/node": "^26.6.5",
     "@typescript-eslint/eslint-plugin": "^8.71.1",
     "@typescript-eslint/parser": "^8.71.1",
+    "concurrently": "^10.0.6",
     "eslint": "^10.12.0",
     "prettier": "^3.9.10",
+    "svelte": "^5.57.2",
+    "svelte-check": "^4.7.6",
     "tsx": "^4.23.15",
     "typescript": "^5.9.3",
+    "vite": "^8.3.4",
     "vitest": "^5.0.4"
   },
   "files": [

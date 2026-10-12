@@ -26,4 +26,4 @@ If no users exist, the service creates the `ADMIN_USER` account from the environ
 
 ## Stages
 
-See `STAGES.md`. Current progress: **S0 complete**. Do not jump ahead into UI, uploads or GPG until S1 starts.
+See `STAGES.md`. Current progress: **S1 complete** (pacman upload/rebuild/serve + GPG sign + minimal UI + real `pacman -Sy` client verification).

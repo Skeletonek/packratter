@@ -1,6 +1,7 @@
 node_modules/
 dist/
 data/
+.svelte-kit/
 *.log
 .env
 .DS_Store

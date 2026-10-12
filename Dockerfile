@@ -13,12 +13,12 @@ RUN curl -fsSL https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-li
 RUN corepack enable
 
 WORKDIR /build
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 
 COPY . .
 RUN pnpm build
-RUN pnpm deploy --prod /app
+RUN pnpm prune --prod
 
 # --- runtime ---------------------------------------------------------------
 FROM registry.fedoraproject.org/fedora:44
@@ -31,9 +31,9 @@ RUN curl -fsSL https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-li
   | tar -xJ -C /usr/local --strip-components=1 --exclude='share/*'
 
 WORKDIR /app
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /build/dist ./dist
+COPY --from=builder /build/node_modules ./node_modules
+COPY --from=builder /build/package.json ./package.json
 
 VOLUME /data
 EXPOSE 8080
