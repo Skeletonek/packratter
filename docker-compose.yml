@@ -1,0 +1,15 @@
+services:
+  packratter:
+    build: .
+    image: packratter:latest
+    container_name: packratter
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/data
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - DATA_DIR=/data
+      - GPG_ROOT=/data/keys/gnupg

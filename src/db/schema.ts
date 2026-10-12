@@ -1,0 +1,79 @@
+import { sqliteTable, text, integer, primaryKey } from 'drizzle-orm/sqlite-core';
+
+export const repos = sqliteTable('repos', {
+  id: text().primaryKey(),
+  name: text().notNull().unique(),
+  type: text().notNull(),
+  createdAt: integer('created_at').notNull(),
+});
+
+export const envs = sqliteTable('envs', {
+  id: text().primaryKey(),
+  repoId: text('repo_id')
+    .notNull()
+    .references(() => repos.id, { onDelete: 'cascade' }),
+  name: text().notNull(),
+});
+
+export const packages = sqliteTable('packages', {
+  id: text().primaryKey(),
+  envId: text('env_id')
+    .notNull()
+    .references(() => envs.id, { onDelete: 'cascade' }),
+  filename: text().notNull(),
+  version: text(),
+  arch: text(),
+  size: integer(),
+  sha256: text(),
+  status: text().notNull(),
+  createdAt: integer('created_at').notNull(),
+});
+
+export const gpgKeys = sqliteTable('gpg_keys', {
+  id: text().primaryKey(),
+  fingerprint: text().notNull().unique(),
+  publicArmored: text('public_armored').notNull(),
+  createdAt: integer('created_at').notNull(),
+});
+
+export const repoKeys = sqliteTable(
+  'repo_keys',
+  {
+    repoId: text('repo_id')
+      .notNull()
+      .references(() => repos.id, { onDelete: 'cascade' }),
+    keyId: text('key_id')
+      .notNull()
+      .references(() => gpgKeys.id, { onDelete: 'cascade' }),
+  },
+  (table) => [primaryKey({ columns: [table.repoId, table.keyId] })],
+);
+
+export const users = sqliteTable('users', {
+  id: text().primaryKey(),
+  login: text().notNull().unique(),
+  passHash: text('pass_hash').notNull(),
+  role: text().notNull(),
+  createdAt: integer('created_at').notNull(),
+});
+
+export const tokens = sqliteTable('tokens', {
+  id: text().primaryKey(),
+  userId: text('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  prefix: text().notNull(),
+  hash: text().notNull(),
+  scopes: text().notNull(),
+  createdAt: integer('created_at').notNull(),
+});
+
+export const jobs = sqliteTable('jobs', {
+  id: text().primaryKey(),
+  repoId: text('repo_id').references(() => repos.id, { onDelete: 'set null' }),
+  envId: text('env_id').references(() => envs.id, { onDelete: 'set null' }),
+  kind: text().notNull(),
+  status: text().notNull(),
+  log: text().notNull().default(''),
+  createdAt: integer('created_at').notNull(),
+});
