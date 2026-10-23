@@ -25,6 +25,7 @@ export const packages = sqliteTable('packages', {
   arch: text(),
   size: integer(),
   sha256: text(),
+  ref: text(),
   status: text().notNull(),
   createdAt: integer('created_at').notNull(),
 });

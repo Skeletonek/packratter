@@ -10,14 +10,24 @@ import { config } from '../../config.js';
 import { nowSeconds } from '../../lib/time.js';
 import { repoEnvDir } from '../../lib/paths.js';
 import * as pacman from '../../formats/pacman.js';
+import * as flatpak from '../../formats/flatpak.js';
 import { enqueueRebuild } from '../../jobs/queue.js';
 
 const MAX_SIZE = 2 * 1024 * 1024 * 1024;
 
+function extensionForType(type: string): string {
+  return type === 'flatpak' ? '.flatpak' : '.pkg.tar.zst';
+}
+
 const packagesRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.put('/:repo/:env/packages', { config: { bodyLimit: MAX_SIZE } }, async (request, reply) => {
     const { repo, env } = request.params as { repo: string; env: string };
-    // :env is the env *name* (e.g. "stable"), not its UUID
+    const repoRow = db.select().from(schema.repos).where(eq(schema.repos.id, repo)).all()[0];
+    if (!repoRow) throw new AppError('NOT_FOUND', 'repo not found', 404);
+    if (repoRow.type === 'flatpak' && !config.ENABLE_FLATPAK) {
+      throw new AppError('NOT_IMPLEMENTED', 'Flatpak support is disabled', 400);
+    }
+
     const envRow = db
       .select()
       .from(schema.envs)
@@ -32,26 +42,46 @@ const packagesRoutes: FastifyPluginAsync = async (fastify) => {
 
     const tmpDir = join(config.DATA_DIR, 'tmp');
     mkdirSync(tmpDir, { recursive: true });
-    const tmpPath = join(tmpDir, `${randomUUID()}.pkg.tar.zst`);
+    const tmpPath = join(tmpDir, `${randomUUID()}${extensionForType(repoRow.type)}`);
     writeFileSync(tmpPath, body);
 
-    const validation = pacman.validate(tmpPath);
+    let validation: { ok: true } | { ok: false; error: string };
+    if (repoRow.type === 'flatpak') {
+      validation = flatpak.validate(tmpPath);
+    } else {
+      validation = pacman.validate(tmpPath);
+    }
     if (!validation.ok) {
       unlinkSync(tmpPath);
       throw new AppError('VALIDATION_ERROR', validation.error, 400);
     }
 
-    const meta = pacman.ingest(envRow, tmpPath, body);
+    let meta:
+      | (pacman.PacmanMeta & { ref?: undefined })
+      | (flatpak.FlatpakMeta & { version?: undefined; arch?: undefined });
+    try {
+      if (repoRow.type === 'flatpak') {
+        meta = flatpak.ingest(envRow, tmpPath, body);
+      } else {
+        meta = pacman.ingest(envRow, tmpPath, body);
+      }
+    } catch (err) {
+      try {
+        unlinkSync(tmpPath);
+      } catch {}
+      throw new AppError('INGEST_ERROR', String(err), 400);
+    }
 
     db.insert(schema.packages)
       .values({
         id: randomUUID(),
         envId: envRow.id,
         filename: meta.filename,
-        version: meta.version,
-        arch: meta.arch,
+        version: 'version' in meta ? meta.version : null,
+        arch: 'arch' in meta ? meta.arch : null,
         size: meta.size,
         sha256: meta.sha256,
+        ref: 'ref' in meta ? meta.ref : null,
         status: 'pending',
         createdAt: nowSeconds(),
       })
@@ -65,7 +95,9 @@ const packagesRoutes: FastifyPluginAsync = async (fastify) => {
 
   fastify.delete('/:repo/:env/packages/:filename', async (request) => {
     const { repo, env, filename } = request.params as { repo: string; env: string; filename: string };
-    // :env is the env *name* (e.g. "stable"), not its UUID
+    const repoRow = db.select().from(schema.repos).where(eq(schema.repos.id, repo)).all()[0];
+    if (!repoRow) throw new AppError('NOT_FOUND', 'repo not found', 404);
+
     const envRow = db
       .select()
       .from(schema.envs)
@@ -80,9 +112,13 @@ const packagesRoutes: FastifyPluginAsync = async (fastify) => {
       .all()[0];
     if (!pkg) throw new AppError('NOT_FOUND', 'package not found', 404);
 
-    try {
-      unlinkSync(join(repoEnvDir(repo, envRow.id), filename));
-    } catch {}
+    if (repoRow.type === 'flatpak') {
+      flatpak.removeBundle(envRow, pkg);
+    } else {
+      try {
+        unlinkSync(join(repoEnvDir(repo, envRow.id), filename));
+      } catch {}
+    }
     db.delete(schema.packages).where(eq(schema.packages.id, pkg.id)).run();
 
     const jobId = await enqueueRebuild(repo, envRow.id);

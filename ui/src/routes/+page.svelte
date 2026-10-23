@@ -13,6 +13,7 @@
 
   let repos: Repo[] = [];
   let name = '';
+  let type = 'pacman';
   let loading = true;
 
   async function load() {
@@ -30,7 +31,7 @@
     const res = await fetch('/api/v1/repos', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, type: 'pacman' }),
+      body: JSON.stringify({ name, type }),
     });
     const json = await res.json();
     if (!json.success) {
@@ -38,6 +39,7 @@
       return;
     }
     name = '';
+    type = 'pacman';
     await load();
     await goto(resolve(`/repos/${json.data.id}`));
   }
@@ -79,9 +81,9 @@
 
   <div class="card shadow-sm">
     <div class="card-body">
-      <h5 class="card-title">Create pacman repo</h5>
+      <h5 class="card-title">Create repository</h5>
       <form on:submit|preventDefault={createRepo} class="row g-2 align-items-end">
-        <div class="col-md-6">
+        <div class="col-md-4">
           <label for="repo-name" class="form-label">Name</label>
           <input
             id="repo-name"
@@ -91,6 +93,13 @@
             required
             pattern="[a-z0-9-]+"
           />
+        </div>
+        <div class="col-md-4">
+          <label for="repo-type" class="form-label">Type</label>
+          <select id="repo-type" class="form-select" bind:value={type}>
+            <option value="pacman">pacman</option>
+            <option value="flatpak">flatpak</option>
+          </select>
         </div>
         <div class="col-md-3">
           <button type="submit" class="btn btn-primary w-100">Create</button>

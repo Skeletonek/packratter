@@ -8,7 +8,8 @@ import { AppError } from '../../errors.js';
 import { nowSeconds } from '../../lib/time.js';
 import { ensureRepoEnvDir } from '../../lib/paths.js';
 import { generateRepoKey, publicKey, repoFingerprint } from '../../gpg/index.js';
-import { setupSnippet } from '../../formats/pacman.js';
+import { setupSnippet as pacmanSetupSnippet } from '../../formats/pacman.js';
+import { setupSnippet as flatpakSetupSnippet } from '../../formats/flatpak.js';
 import { config } from '../../config.js';
 
 const createRepoSchema = z.object({
@@ -17,12 +18,15 @@ const createRepoSchema = z.object({
     .min(1)
     .max(64)
     .regex(/^[a-z0-9-]+$/),
-  type: z.enum(['pacman']),
+  type: z.enum(['pacman', 'flatpak']),
 });
 
 const reposRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post('/', async (request, reply) => {
     const body = createRepoSchema.parse(request.body);
+    if (body.type === 'flatpak' && !config.ENABLE_FLATPAK) {
+      throw new AppError('NOT_IMPLEMENTED', 'Flatpak support is disabled', 400);
+    }
     const id = randomUUID();
     const envId = randomUUID();
 
@@ -96,9 +100,13 @@ const reposRoutes: FastifyPluginAsync = async (fastify) => {
     const fingerprint = repoFingerprint(repo);
     if (!fingerprint) throw new AppError('NOT_FOUND', 'repo has no signing key', 404);
     const baseUrl = config.BASE_URL || `http://localhost:${config.PORT}`;
+    const snippet =
+      row.type === 'flatpak'
+        ? flatpakSetupSnippet(row.id, row.name, baseUrl, env, fingerprint)
+        : pacmanSetupSnippet(row.id, row.name, baseUrl, env, fingerprint);
     return {
       success: true,
-      data: setupSnippet(row.id, row.name, baseUrl, env, fingerprint),
+      data: snippet,
     };
   });
 };

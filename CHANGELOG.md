@@ -4,6 +4,9 @@
 
 ### Changes
 
+- Added flatpak bundle import and serve, gated by `ENABLE_FLATPAK=1`.
+- Flatpak repos rebuild a GPG-signed OSTree repo that `flatpak remote-add` and `flatpak install` can consume.
+- The web UI now lets you choose between pacman and flatpak when creating a repo.
 - New Bootstrap-based UI with light and dark themes.
 - Repo detail page now uses tabs for Upload, Packages, Jobs, and Setup.
 - Added a copy-to-clipboard button for the setup snippet.

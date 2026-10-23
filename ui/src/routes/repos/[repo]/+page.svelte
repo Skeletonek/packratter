@@ -21,6 +21,7 @@
   const repoId = page.params.repo;
 
   let repoName = '';
+  let repoType = 'pacman';
   let envId = '';
   let packages: Package[] = [];
   let jobs: Job[] = [];
@@ -55,6 +56,7 @@
     if (!repoJson.success) throw new Error(repoJson.error?.message ?? 'repo load failed');
     if (!pkgJson.success) throw new Error(pkgJson.error?.message ?? 'package load failed');
     repoName = repoJson.data.name;
+    repoType = repoJson.data.type;
     envId = repoJson.data.envs[0]?.id ?? '';
     packages = pkgJson.data;
     snippet = snippetJson.success ? snippetJson.data : '';
@@ -161,15 +163,27 @@
     <div class="card shadow-sm">
       <div class="card-body">
         <h5 class="card-title">Upload package</h5>
-        <p class="text-body-secondary">Select a <code>.pkg.tar.zst</code> or <code>.pkg.tar.xz</code> file.</p>
-        <div class="mb-3">
-          <input
-            class="form-control"
-            type="file"
-            accept=".pkg.tar.zst,.pkg.tar.xz"
-            bind:files={file}
-          />
-        </div>
+        {#if repoType === 'flatpak'}
+          <p class="text-body-secondary">Select a <code>.flatpak</code> bundle.</p>
+          <div class="mb-3">
+            <input
+              class="form-control"
+              type="file"
+              accept=".flatpak"
+              bind:files={file}
+            />
+          </div>
+        {:else}
+          <p class="text-body-secondary">Select a <code>.pkg.tar.zst</code> or <code>.pkg.tar.xz</code> file.</p>
+          <div class="mb-3">
+            <input
+              class="form-control"
+              type="file"
+              accept=".pkg.tar.zst,.pkg.tar.xz"
+              bind:files={file}
+            />
+          </div>
+        {/if}
         <button class="btn btn-primary" on:click={upload} disabled={uploading || !file}>
           {#if uploading}
             <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
@@ -206,8 +220,8 @@
                 {#each packages as pkg}
                   <tr>
                     <td class="text-break">{pkg.filename}</td>
-                    <td>{pkg.version}</td>
-                    <td>{pkg.arch}</td>
+                    <td>{pkg.version ?? '—'}</td>
+                    <td>{pkg.arch ?? '—'}</td>
                     <td>{formatBytes(pkg.size)}</td>
                     <td>
                       <span class="badge" class:text-bg-success={pkg.status === 'ready'} class:text-bg-warning={pkg.status !== 'ready'}>{pkg.status}</span>
@@ -268,7 +282,11 @@
     <div class="card shadow-sm">
       <div class="card-body">
         <h5 class="card-title">Setup</h5>
-        <p class="text-body-secondary">Add this block to <code>/etc/pacman.conf</code>:</p>
+        {#if repoType === 'flatpak'}
+          <p class="text-body-secondary">Run these commands on the client to add the remote and install an app:</p>
+        {:else}
+          <p class="text-body-secondary">Add this block to <code>/etc/pacman.conf</code>:</p>
+        {/if}
         {#if snippet}
           <div class="position-relative">
             <button class="btn btn-sm btn-outline-secondary position-absolute top-0 end-0 m-2" on:click={copySnippet}>

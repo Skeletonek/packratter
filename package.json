@@ -18,7 +18,8 @@
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:full": "ENABLE_FLATPAK=1 RUN_FULL_TESTS=1 vitest run"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.3",

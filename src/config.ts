@@ -10,6 +10,8 @@ const configSchema = z.object({
   ADMIN_PASS: z.string().min(1),
   GPG_ROOT: z.string().default('/data/keys/gnupg'),
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),
+  // TODO: remove ENABLE_FLATPAK once flatpak support is verified stable in production.
+  ENABLE_FLATPAK: z.preprocess((value) => value === 'true' || value === '1' || value === true, z.boolean()).default(false),
 });
 
 export type Config = z.infer<typeof configSchema>;

@@ -12,6 +12,7 @@ import jobsRoutes from './api/routes/jobs.js';
 import { db } from './db/index.js';
 import * as schema from './db/schema.js';
 import { serveHeaders as pacmanServeHeaders } from './formats/pacman.js';
+import { serveHeaders as flatpakServeHeaders } from './formats/flatpak.js';
 
 const uiRoot = join(import.meta.dirname, '../dist/ui');
 const hasUi = existsSync(uiRoot);
@@ -86,6 +87,8 @@ export function buildServer() {
 
   app.get('/r/:repo/:env/*', async (request: FastifyRequest, reply: FastifyReply) => {
     const { repo, env } = request.params as { repo: string; env: string };
+    const repoRow = db.select().from(schema.repos).where(eq(schema.repos.id, repo)).all()[0];
+    if (!repoRow) throw new AppError('NOT_FOUND', 'repo not found', 404);
     const envRow = db
       .select()
       .from(schema.envs)
@@ -101,7 +104,8 @@ export function buildServer() {
       throw new AppError('NOT_FOUND', 'invalid path', 404);
     }
 
-    const headers = pacmanServeHeaders(resolved);
+    const serveHeaders = repoRow.type === 'flatpak' ? flatpakServeHeaders : pacmanServeHeaders;
+    const headers = serveHeaders(resolved);
     for (const [key, value] of Object.entries(headers)) {
       void reply.header(key, value);
     }

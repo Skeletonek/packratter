@@ -61,7 +61,7 @@ beforeAll(async () => {
   server = buildServer();
 });
 
-describe('API used by the repo pages', () => {
+describe.skipIf(process.env.RUN_FULL_TESTS !== '1')('API used by the repo pages', () => {
   it('creates a pacman repo with the implicit stable env', async () => {
     const res = await server.inject({
       method: 'POST',

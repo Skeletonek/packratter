@@ -28,6 +28,10 @@ If no users exist, the service creates the `ADMIN_USER` account from the environ
 
 `CHANGELOG.md` uses only these sections: **Changes**, **Fixes**, **Security**, and **Updates** (reserved for dependency updates). Omit empty sections. Entries should be user-facing; avoid implementation details, stage labels, and internal architecture speak.
 
+## Temporary flags
+
+`ENABLE_FLATPAK` gates flatpak repo creation while the OSTree-over-HTTP path is proven in real use. Remove it once flatpak is stable.
+
 ## Stages
 
-See `STAGES.md`. Current progress: **S1 complete** (pacman upload/rebuild/serve + GPG sign + minimal UI + real `pacman -Sy` client verification).
+See `STAGES.md`. Current progress: **S2 complete** (flatpak bundle import + GPG-signed OSTree summary + serve + real `flatpak remote-add` client verification, gated by `ENABLE_FLATPAK=1`).
