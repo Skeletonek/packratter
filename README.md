@@ -4,7 +4,7 @@
 
 Host-only repository manager for `deb`, `rpm`, `pacman` and `flatpak` packages.
 
-This is the **S1 Pacman** branch: repository creation, raw-body package upload, GPG-signed `repo-add` rebuilds, static serving under `/r/`, and a minimal SvelteKit UI at `/app`. See [`PLAN.md`](./PLAN.md) and [`STAGES.md`](./STAGES.md) for the full design and roadmap.
+Currently supports pacman repositories: create repos, upload packages, automatically rebuild and GPG-sign the database, then serve everything under `/r/`. The web UI lives at `/app` and is styled with Bootstrap 5, including light and dark themes.
 
 ## Quick start (local)
 
@@ -24,7 +24,7 @@ curl http://localhost:5000/healthz
 ### Run backend + UI together
 
 ```bash
-pnpm dev:all
+pnpm dev
 ```
 
 This starts the backend on `PORT` (default `5000`) and the SvelteKit dev server with an `/api/v1` + `/r` proxy.
@@ -52,6 +52,10 @@ curl http://localhost:5000/api/v1/jobs/<job-id>
 
 After the rebuild job finishes, copy the setup snippet from the repo page (or `GET /api/v1/repos/<repo-id>/stable/setup-snippet`) into `/etc/pacman.conf`.
 
+## UI
+
+Open `http://localhost:5000/app`. The UI uses Bootstrap 5 with a light/dark theme toggle, tabbed repo management, copy-to-clipboard setup snippets, and expandable error details.
+
 ## Docker / Podman
 
 ```bash
@@ -66,9 +70,9 @@ The image is based on Fedora 44 with Node 24.21.0 installed from the official ta
 
 | Script | Purpose |
 |--------|---------|
-| `pnpm dev` | Run backend with `tsx watch` |
+| `pnpm dev` | Run backend + UI dev server together |
+| `pnpm dev:server` | Run backend with `tsx watch` |
 | `pnpm dev:ui` | Run SvelteKit dev server |
-| `pnpm dev:all` | Run backend + UI dev server together |
 | `pnpm build` | Compile TypeScript to `dist/` and copy SQL migrations |
 | `pnpm start` | Run compiled `dist/index.js` |
 | `pnpm typecheck` | `tsc --noEmit` |

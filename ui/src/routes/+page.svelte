@@ -39,7 +39,7 @@
     }
     name = '';
     await load();
-    goto(resolve(`/repos/${json.data.id}`));
+    await goto(resolve(`/repos/${json.data.id}`));
   }
 
   onMount(() => {
@@ -47,22 +47,55 @@
   });
 </script>
 
-<h1>Repositories</h1>
+<div class="container">
+  <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+    <h1 class="mb-0">Repositories</h1>
+    <span class="badge text-bg-secondary">{repos.length}</span>
+  </div>
 
-{#if loading}
-  <p>Loading…</p>
-{:else}
-  <ul>
-    {#each repos as repo}
-      <li><a href="{resolve(`/repos/${repo.id}`)}">{repo.name}</a> ({repo.type})</li>
-    {:else}
-      <li>No repositories yet.</li>
-    {/each}
-  </ul>
-{/if}
+  {#if loading}
+    <div class="d-flex align-items-center gap-2 text-body-secondary">
+      <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+      Loading…
+    </div>
+  {:else}
+    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-3 mb-4">
+      {#each repos as repo}
+        <div class="col">
+          <a href={resolve(`/repos/${repo.id}`)} class="card text-decoration-none h-100 shadow-sm">
+            <div class="card-body">
+              <h5 class="card-title">{repo.name}</h5>
+              <p class="card-text text-body-secondary">{repo.type}</p>
+            </div>
+          </a>
+        </div>
+      {:else}
+        <div class="col-12">
+          <div class="text-body-secondary">No repositories yet. Create one to get started.</div>
+        </div>
+      {/each}
+    </div>
+  {/if}
 
-<h2>Create pacman repo</h2>
-<form on:submit|preventDefault={createRepo}>
-  <input bind:value={name} placeholder="repo-name" required pattern="[a-z0-9-]+" />
-  <button type="submit">Create</button>
-</form>
+  <div class="card shadow-sm">
+    <div class="card-body">
+      <h5 class="card-title">Create pacman repo</h5>
+      <form on:submit|preventDefault={createRepo} class="row g-2 align-items-end">
+        <div class="col-md-6">
+          <label for="repo-name" class="form-label">Name</label>
+          <input
+            id="repo-name"
+            class="form-control"
+            bind:value={name}
+            placeholder="repo-name"
+            required
+            pattern="[a-z0-9-]+"
+          />
+        </div>
+        <div class="col-md-3">
+          <button type="submit" class="btn btn-primary w-100">Create</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

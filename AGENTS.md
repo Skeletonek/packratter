@@ -24,6 +24,10 @@ Project-specific guidance.
 
 If no users exist, the service creates the `ADMIN_USER` account from the environment and prints a single bearer token. The token is stored as a hash and is never printed again.
 
+## Changelog
+
+`CHANGELOG.md` uses only these sections: **Changes**, **Fixes**, **Security**, and **Updates** (reserved for dependency updates). Omit empty sections. Entries should be user-facing; avoid implementation details, stage labels, and internal architecture speak.
+
 ## Stages
 
 See `STAGES.md`. Current progress: **S1 complete** (pacman upload/rebuild/serve + GPG sign + minimal UI + real `pacman -Sy` client verification).
