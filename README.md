@@ -4,9 +4,15 @@
 
 Host-only repository manager for `deb`, `rpm`, `pacman` and `flatpak` packages.
 
-Currently supports pacman repositories and (behind `ENABLE_FLATPAK=1`) flatpak bundle import. Create repos, upload packages or bundles, automatically rebuild and GPG-sign metadata, then serve everything under `/r/`. The web UI lives at `/app` and is styled with Bootstrap 5, including light and dark themes.
+**Currently very much work in progress.**
 
-## Quick start (local)
+As of now it supports pacman and flatpak repositories (with `ENABLE_FLATPAK=1` env). Create repos, upload packages or bundles then serve everything under `/r/`. Packratter will manage all maintenance stuff like GPG signing and metadata rebuilding. 
+
+The web UI lives at `/app` and is styled with Bootstrap 5, including light and dark themes.
+
+## Quick start
+
+### Local
 
 ```bash
 cp .env.example .env
@@ -21,73 +27,21 @@ The bootstrap API token is printed once on first startup. Open the UI at `http:/
 curl http://localhost:5000/healthz
 ```
 
-### Run backend + UI together
-
-```bash
-pnpm dev
-```
-
-This starts the backend on `PORT` (default `5000`) and the SvelteKit dev server with an `/api/v1` + `/r` proxy.
-
-### Upload a pacman package
-
-```bash
-TOKEN="<bootstrap-token>"
-
-# create a pacman repo
-curl -X POST http://localhost:5000/api/v1/repos \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"name":"myrepo","type":"pacman"}'
-
-# upload (the filename is derived from .PKGINFO)
-curl -T mypackage.pkg.tar.zst \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/octet-stream" \
-  http://localhost:5000/api/v1/repos/<repo-id>/stable/packages
-
-# poll the rebuild job
-curl http://localhost:5000/api/v1/jobs/<job-id>
-```
-
-After the rebuild job finishes, copy the setup snippet from the repo page (or `GET /api/v1/repos/<repo-id>/stable/setup-snippet`) into `/etc/pacman.conf`.
-
-### Flatpak bundles (optional)
-
-Set `ENABLE_FLATPAK=1` to enable flatpak repo creation. Import a bundle, then serve the resulting OSTree repo:
-
-```bash
-# create a flatpak repo
-curl -X POST http://localhost:5000/api/v1/repos \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"name":"myflatpak","type":"flatpak"}'
-
-# upload a .flatpak bundle
-curl -T myapp.flatpak \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/octet-stream" \
-  http://localhost:5000/api/v1/repos/<repo-id>/stable/packages
-
-# poll the rebuild job
-curl http://localhost:5000/api/v1/jobs/<job-id>
-```
-
-After the rebuild job finishes, copy the setup snippet and run it on a client with `flatpak` installed.
-
-## UI
-
-Open `http://localhost:5000/app`. The UI uses Bootstrap 5 with a light/dark theme toggle, tabbed repo management, copy-to-clipboard setup snippets, and expandable error details.
-
-## Docker / Podman
+### Docker / Podman
 
 ```bash
 cp .env.example .env
 # edit ADMIN_USER and ADMIN_PASS
-podman compose up --build
+docker compose up --build
 ```
 
 The image is based on Fedora 44 with Node 24.21.0 installed from the official tarball.
+
+## Documentation
+
+- [Pacman setup](docs/pacman.md)
+- [Flatpak setup](docs/flatpak.md)
+- [API reference](docs/api.md)
 
 ## Scripts
 
@@ -100,5 +54,9 @@ The image is based on Fedora 44 with Node 24.21.0 installed from the official ta
 | `pnpm start` | Run compiled `dist/index.js` |
 | `pnpm typecheck` | `tsc --noEmit` |
 | `pnpm lint` | ESLint |
-| `pnpm test` | Fast unit tests (no system tools touched) |
-| `pnpm test:full` | Full test suite, including real `bsdtar`/`repo-add` and flatpak toolchain |
+| `pnpm test` | Fast unit tests |
+| `pnpm test:full` | Full test suite, including real `bsdtar`/`repo-add` and flatpak toolchain. Recommended to run only in docker environment |
+
+## LLM Usage
+
+This project uses AI to help generate code, and a significant portion of the codebase is AI-generated. However, reviews and quality testing are done entirely by a human. New features are also planed by human with the help of AI to best suit the current project codebase.
