@@ -11,8 +11,7 @@ import packagesRoutes from './api/routes/packages.js';
 import jobsRoutes from './api/routes/jobs.js';
 import { db } from './db/index.js';
 import * as schema from './db/schema.js';
-import { serveHeaders as pacmanServeHeaders } from './formats/pacman.js';
-import { serveHeaders as flatpakServeHeaders } from './formats/flatpak.js';
+import { formats, type RepoType } from './formats/index.js';
 
 const uiRoot = join(import.meta.dirname, '../dist/ui');
 const hasUi = existsSync(uiRoot);
@@ -104,8 +103,7 @@ export function buildServer() {
       throw new AppError('NOT_FOUND', 'invalid path', 404);
     }
 
-    const serveHeaders = repoRow.type === 'flatpak' ? flatpakServeHeaders : pacmanServeHeaders;
-    const headers = serveHeaders(resolved);
+    const headers = formats[repoRow.type as RepoType].serveHeaders(resolved);
     for (const [key, value] of Object.entries(headers)) {
       void reply.header(key, value);
     }

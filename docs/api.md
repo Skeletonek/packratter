@@ -28,7 +28,7 @@ Returns service health.
 
 ### `POST /api/v1/repos`
 
-Create a repository. `type` can be `pacman` or `flatpak` (the latter requires `ENABLE_FLATPAK=1`).
+Create a repository. `type` can be `pacman`, `deb`, `rpm`, or `flatpak` (the latter requires `ENABLE_FLATPAK=1`).
 
 Request:
 
@@ -89,7 +89,7 @@ Returns the armored GPG public key for the repository.
 
 ### `GET /api/v1/repos/:repo/:env/setup-snippet` (public)
 
-Returns client configuration instructions for the repository type (pacman.conf snippet or flatpak remote-add commands).
+Returns client configuration instructions for the repository type (pacman.conf block, apt sources.list entry, dnf .repo file, or flatpak remote-add commands).
 
 ## Jobs
 
@@ -104,4 +104,6 @@ Get job status and log.
 Serve repository files with format-appropriate cache headers. For example:
 
 - Pacman: `*.db*`, `*.files*`, `*.sig` → `no-cache`; package files → immutable.
+- Deb: `dists/**` metadata → `no-cache`; `pool/*.deb` → immutable.
+- RPM: `repodata/*` → `no-cache`; `*.rpm` → immutable.
 - Flatpak: `summary`, `summary.sig`, `summary.idx` → `no-cache`; OSTree objects → immutable.

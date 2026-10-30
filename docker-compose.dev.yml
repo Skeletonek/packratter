@@ -1,0 +1,20 @@
+# Development: install + build on the host, the container just runs the output.
+#   pnpm install && pnpm build
+#   docker compose -f docker-compose.dev.yml up [-d]
+# The repo is bind-mounted, so after editing code re-run `pnpm build` and
+# restart the service to pick it up. Data lives in ./data like on the host.
+
+services:
+  packratter-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    image: packratter-dev:latest
+    container_name: packratter-dev
+    ports:
+      - '5000:5000'
+    volumes:
+      - ./:/app
+    env_file:
+      - .env
+    entrypoint: ['node', 'dist/index.js']

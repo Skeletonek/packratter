@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.0 — 2026-10-30
+
+### Changes
+
+- Added deb and rpm repository support with apt- and dnf-compatible metadata and client setup snippets.
+
 ## 0.2.0 — 2026-10-23
 
 ### Changes

@@ -6,19 +6,17 @@ import { eq } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import * as schema from '../db/schema.js';
 import { ensureRepoEnvDir, repoEnvDir } from '../lib/paths.js';
-import { gpgHome, repoFingerprint } from '../gpg/index.js';
-
-export interface PacmanMeta {
-  filename: string;
-  name: string;
-  version: string;
-  arch: string;
-  size: number;
-  sha256: string;
-}
+import { detachSign, gpgHome, repoFingerprint } from '../gpg/index.js';
+import type { EnvRef, PackageMeta, ValidationResult } from './types.js';
 
 function detectExtension(bytes: Buffer): string {
-  if (bytes.length >= 4 && bytes[0] === 0x28 && bytes[1] === 0xb5 && bytes[2] === 0x2f && bytes[3] === 0xfd) {
+  if (
+    bytes.length >= 4 &&
+    bytes[0] === 0x28 &&
+    bytes[1] === 0xb5 &&
+    bytes[2] === 0x2f &&
+    bytes[3] === 0xfd
+  ) {
     return '.pkg.tar.zst';
   }
   if (
@@ -53,7 +51,7 @@ function readPkginfo(path: string): Record<string, string> {
   return info;
 }
 
-export function validate(tmpPath: string): { ok: true } | { ok: false; error: string } {
+export function validate(tmpPath: string): ValidationResult {
   const check = spawnSync('bsdtar', ['-tqf', tmpPath, '.PKGINFO'], {
     encoding: 'utf8',
     env: { ...process.env, LC_ALL: 'C' },
@@ -64,11 +62,7 @@ export function validate(tmpPath: string): { ok: true } | { ok: false; error: st
   return { ok: true };
 }
 
-export function ingest(
-  env: { id: string; repoId: string; name: string },
-  tmpPath: string,
-  bytes: Buffer,
-): PacmanMeta {
+export function ingest(env: EnvRef, tmpPath: string, bytes: Buffer): PackageMeta {
   const info = readPkginfo(tmpPath);
   const { pkgname, pkgver, pkgrel, arch } = info;
   if (!pkgname || !pkgver || !arch) {
@@ -85,18 +79,24 @@ export function ingest(
 
   return {
     filename,
-    name: pkgname,
     version: pkgver,
     arch,
+    ref: null,
     size: bytes.length,
     sha256: createHash('sha256').update(bytes).digest('hex'),
   };
 }
 
-export function rebuild(
-  env: { id: string; repoId: string; name: string },
-  log: (line: string) => void,
+export function removePackage(
+  env: EnvRef,
+  pkg: { filename: string; arch: string | null; ref: string | null },
 ): void {
+  try {
+    unlinkSync(join(repoEnvDir(env.repoId, env.id), pkg.filename));
+  } catch {}
+}
+
+export function rebuild(env: EnvRef, log: (line: string) => void): void {
   const dir = repoEnvDir(env.repoId, env.id);
   const repo = db.select().from(schema.repos).where(eq(schema.repos.id, env.repoId)).all()[0];
   if (!repo) {
@@ -138,29 +138,9 @@ export function rebuild(
     throw new Error(`repo-add failed with code ${result.status}`);
   }
 
-  function signFile(path: string) {
-    const sign = spawnSync(
-      'gpg',
-      [
-        '--batch',
-        '--pinentry-mode',
-        'loopback',
-        '--passphrase',
-        '',
-        '--default-key',
-        fingerprint!,
-        '--yes',
-        '--detach-sign',
-        path,
-      ],
-      { cwd: dir, encoding: 'utf8', env: gpgEnv },
-    );
-    if (sign.stdout) log(sign.stdout);
-    if (sign.stderr) log(sign.stderr);
-    if (sign.status !== 0) {
-      throw new Error(`gpg signing failed for ${path}: ${sign.stderr || sign.status}`);
-    }
-  }
+  const signFile = (name: string) => {
+    detachSign(env.repoId, fingerprint, join(dir, name), join(dir, `${name}.sig`), log);
+  };
 
   signFile(`${repo.name}.db`);
   signFile(`${repo.name}.files`);

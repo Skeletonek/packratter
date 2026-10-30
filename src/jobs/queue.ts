@@ -4,8 +4,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import * as schema from '../db/schema.js';
 import { nowSeconds } from '../lib/time.js';
-import * as pacman from '../formats/pacman.js';
-import * as flatpak from '../formats/flatpak.js';
+import { formats, type RepoType } from '../formats/index.js';
 
 const queues = new Map<string, PQueue>();
 
@@ -44,12 +43,11 @@ export async function enqueueRebuild(repoId: string, envId: string): Promise<str
     try {
       const repo = db.select().from(schema.repos).where(eq(schema.repos.id, repoId)).all()[0];
       if (!repo) throw new Error('repo not found');
-      if (repo.type === 'flatpak') {
-        flatpak.rebuild(env, log);
-      } else {
-        pacman.rebuild(env, log);
-      }
-      db.update(schema.packages).set({ status: 'ready' }).where(eq(schema.packages.envId, env.id)).run();
+      formats[repo.type as RepoType].rebuild(env, log);
+      db.update(schema.packages)
+        .set({ status: 'ready' })
+        .where(eq(schema.packages.envId, env.id))
+        .run();
       db.update(schema.jobs)
         .set({ status: 'done', log: logLines.join('\n') })
         .where(eq(schema.jobs.id, jobId))

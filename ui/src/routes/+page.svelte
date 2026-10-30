@@ -98,6 +98,8 @@
           <label for="repo-type" class="form-label">Type</label>
           <select id="repo-type" class="form-select" bind:value={type}>
             <option value="pacman">pacman</option>
+            <option value="deb">deb</option>
+            <option value="rpm">rpm</option>
             <option value="flatpak">flatpak</option>
           </select>
         </div>

@@ -1,6 +1,6 @@
 {
   "name": "packratter",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Host-only package repository manager for deb, rpm, pacman and flatpak.",
   "private": true,
   "type": "module",

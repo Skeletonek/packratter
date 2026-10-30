@@ -8,8 +8,7 @@ import { AppError } from '../../errors.js';
 import { nowSeconds } from '../../lib/time.js';
 import { ensureRepoEnvDir } from '../../lib/paths.js';
 import { generateRepoKey, publicKey, repoFingerprint } from '../../gpg/index.js';
-import { setupSnippet as pacmanSetupSnippet } from '../../formats/pacman.js';
-import { setupSnippet as flatpakSetupSnippet } from '../../formats/flatpak.js';
+import { formats, type RepoType } from '../../formats/index.js';
 import { config } from '../../config.js';
 
 const createRepoSchema = z.object({
@@ -18,7 +17,7 @@ const createRepoSchema = z.object({
     .min(1)
     .max(64)
     .regex(/^[a-z0-9-]+$/),
-  type: z.enum(['pacman', 'flatpak']),
+  type: z.enum(['pacman', 'deb', 'rpm', 'flatpak']),
 });
 
 const reposRoutes: FastifyPluginAsync = async (fastify) => {
@@ -35,7 +34,9 @@ const reposRoutes: FastifyPluginAsync = async (fastify) => {
       throw new AppError('CONFLICT', 'repo name already exists', 409);
     }
 
-    db.insert(schema.repos).values({ id, name: body.name, type: body.type, createdAt: nowSeconds() }).run();
+    db.insert(schema.repos)
+      .values({ id, name: body.name, type: body.type, createdAt: nowSeconds() })
+      .run();
     db.insert(schema.envs).values({ id: envId, repoId: id, name: 'stable' }).run();
     ensureRepoEnvDir(id, envId);
     generateRepoKey(id);
@@ -49,7 +50,10 @@ const reposRoutes: FastifyPluginAsync = async (fastify) => {
 
   fastify.get('/', async () => {
     const rows = db.select().from(schema.repos).all();
-    return { success: true, data: rows.map((row) => ({ ...row, createdAt: row.createdAt * 1000 })) };
+    return {
+      success: true,
+      data: rows.map((row) => ({ ...row, createdAt: row.createdAt * 1000 })),
+    };
   });
 
   fastify.get('/:repo', async (request) => {
@@ -76,7 +80,10 @@ const reposRoutes: FastifyPluginAsync = async (fastify) => {
 
     let query = db.select().from(schema.packages).where(eq(schema.packages.envId, envRow.id));
     if (q) {
-      query = db.select().from(schema.packages).where(and(eq(schema.packages.envId, envRow.id), like(schema.packages.filename, `%${q}%`)));
+      query = db
+        .select()
+        .from(schema.packages)
+        .where(and(eq(schema.packages.envId, envRow.id), like(schema.packages.filename, `%${q}%`)));
     }
     const all = query.all();
     const total = all.length;
@@ -100,10 +107,13 @@ const reposRoutes: FastifyPluginAsync = async (fastify) => {
     const fingerprint = repoFingerprint(repo);
     if (!fingerprint) throw new AppError('NOT_FOUND', 'repo has no signing key', 404);
     const baseUrl = config.BASE_URL || `http://localhost:${config.PORT}`;
-    const snippet =
-      row.type === 'flatpak'
-        ? flatpakSetupSnippet(row.id, row.name, baseUrl, env, fingerprint)
-        : pacmanSetupSnippet(row.id, row.name, baseUrl, env, fingerprint);
+    const snippet = formats[row.type as RepoType].setupSnippet(
+      row.id,
+      row.name,
+      baseUrl,
+      env,
+      fingerprint,
+    );
     return {
       success: true,
       data: snippet,

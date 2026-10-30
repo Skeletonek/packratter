@@ -173,6 +173,26 @@
               bind:files={file}
             />
           </div>
+        {:else if repoType === 'deb'}
+          <p class="text-body-secondary">Select a <code>.deb</code> package.</p>
+          <div class="mb-3">
+            <input
+              class="form-control"
+              type="file"
+              accept=".deb"
+              bind:files={file}
+            />
+          </div>
+        {:else if repoType === 'rpm'}
+          <p class="text-body-secondary">Select an <code>.rpm</code> package.</p>
+          <div class="mb-3">
+            <input
+              class="form-control"
+              type="file"
+              accept=".rpm"
+              bind:files={file}
+            />
+          </div>
         {:else}
           <p class="text-body-secondary">Select a <code>.pkg.tar.zst</code> or <code>.pkg.tar.xz</code> file.</p>
           <div class="mb-3">
@@ -284,6 +304,10 @@
         <h5 class="card-title">Setup</h5>
         {#if repoType === 'flatpak'}
           <p class="text-body-secondary">Run these commands on the client to add the remote and install an app:</p>
+        {:else if repoType === 'deb'}
+          <p class="text-body-secondary">Run these commands on the client to add the apt repository:</p>
+        {:else if repoType === 'rpm'}
+          <p class="text-body-secondary">Run these commands on the client to add the dnf repository:</p>
         {:else}
           <p class="text-body-secondary">Add this block to <code>/etc/pacman.conf</code>:</p>
         {/if}

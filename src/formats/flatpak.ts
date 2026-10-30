@@ -5,23 +5,17 @@ import { spawnSync } from 'node:child_process';
 import { ensureRepoEnvDir } from '../lib/paths.js';
 import { gpgHome, repoFingerprint } from '../gpg/index.js';
 import { config } from '../config.js';
+import type { EnvRef, PackageMeta, ValidationResult } from './types.js';
 
-export interface FlatpakMeta {
-  filename: string;
-  ref: string;
-  size: number;
-  sha256: string;
-}
-
-function flatpakDir(env: { repoId: string; id: string }): string {
+function flatpakDir(env: EnvRef): string {
   return join(ensureRepoEnvDir(env.repoId, env.id), 'flatpak');
 }
 
-function ostreeRepo(env: { repoId: string; id: string }): string {
+function ostreeRepo(env: EnvRef): string {
   return join(flatpakDir(env), 'ostree');
 }
 
-function bundlesDir(env: { repoId: string; id: string }): string {
+function bundlesDir(env: EnvRef): string {
   return join(flatpakDir(env), 'bundles');
 }
 
@@ -29,7 +23,7 @@ function safeFilename(ref: string): string {
   return `${ref.replace(/[^a-zA-Z0-9._-]/g, '_')}.flatpak`;
 }
 
-function ensureOstreeRepo(env: { repoId: string; id: string }): void {
+function ensureOstreeRepo(env: EnvRef): void {
   const repo = ostreeRepo(env);
   if (existsSync(join(repo, 'config'))) return;
   mkdirSync(repo, { recursive: true });
@@ -42,7 +36,7 @@ function ensureOstreeRepo(env: { repoId: string; id: string }): void {
   }
 }
 
-export function validate(tmpPath: string): { ok: true } | { ok: false; error: string } {
+export function validate(tmpPath: string): ValidationResult {
   const base = mkdtempSync(join(config.DATA_DIR, 'tmp', 'flatpak-validate-'));
   const repo = join(base, 'repo');
   try {
@@ -67,11 +61,7 @@ export function validate(tmpPath: string): { ok: true } | { ok: false; error: st
   }
 }
 
-export function ingest(
-  env: { id: string; repoId: string; name: string },
-  tmpPath: string,
-  bytes: Buffer,
-): FlatpakMeta {
+export function ingest(env: EnvRef, tmpPath: string, bytes: Buffer): PackageMeta {
   ensureOstreeRepo(env);
   const repo = ostreeRepo(env);
 
@@ -96,15 +86,17 @@ export function ingest(
 
   return {
     filename,
+    version: null,
+    arch: null,
     ref,
     size: bytes.length,
     sha256: createHash('sha256').update(bytes).digest('hex'),
   };
 }
 
-export function removeBundle(
-  env: { id: string; repoId: string; name: string },
-  pkg: { filename: string; ref: string | null },
+export function removePackage(
+  env: EnvRef,
+  pkg: { filename: string; arch: string | null; ref: string | null },
 ): void {
   const bundlePath = join(bundlesDir(env), pkg.filename);
   try {
@@ -123,11 +115,7 @@ export function removeBundle(
   }
 }
 
-function signAllCommits(
-  env: { id: string; repoId: string; name: string },
-  fingerprint: string,
-  log: (line: string) => void,
-): void {
+function signAllCommits(env: EnvRef, fingerprint: string, log: (line: string) => void): void {
   const repo = ostreeRepo(env);
   const refs = spawnSync('ostree', ['refs', '--repo', repo], {
     encoding: 'utf8',
@@ -137,7 +125,10 @@ function signAllCommits(
     throw new Error(`ostree refs failed: ${refs.stderr}`);
   }
 
-  for (const ref of refs.stdout.split('\n').map((line) => line.trim()).filter(Boolean)) {
+  for (const ref of refs.stdout
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)) {
     const rev = spawnSync('ostree', ['rev-parse', '--repo', repo, ref], {
       encoding: 'utf8',
       env: { ...process.env, LC_ALL: 'C' },
@@ -162,10 +153,7 @@ function signAllCommits(
   }
 }
 
-export function rebuild(
-  env: { id: string; repoId: string; name: string },
-  log: (line: string) => void,
-): void {
+export function rebuild(env: EnvRef, log: (line: string) => void): void {
   const repo = ostreeRepo(env);
   ensureOstreeRepo(env);
 

@@ -25,6 +25,71 @@ function gpgArgs(repoId: string): string[] {
   return ['--homedir', gpgHome(repoId)];
 }
 
+function signEnv(repoId: string): NodeJS.ProcessEnv {
+  return { ...process.env, LC_ALL: 'C', GNUPGHOME: gpgHome(repoId) };
+}
+
+function runSign(
+  repoId: string,
+  fingerprint: string,
+  args: string[],
+  input: string,
+  output: string,
+  log: (line: string) => void,
+): void {
+  const sign = spawnSync(
+    'gpg',
+    [
+      '--batch',
+      '--pinentry-mode',
+      'loopback',
+      '--passphrase',
+      '',
+      '--default-key',
+      fingerprint,
+      '--yes',
+      ...args,
+      '-o',
+      output,
+      input,
+    ],
+    { encoding: 'utf8', env: signEnv(repoId) },
+  );
+  if (sign.stdout) log(sign.stdout);
+  if (sign.stderr) log(sign.stderr);
+  if (sign.status !== 0) {
+    throw new Error(`gpg signing failed for ${input}: ${sign.stderr || sign.status}`);
+  }
+}
+
+export function detachSign(
+  repoId: string,
+  fingerprint: string,
+  input: string,
+  output: string,
+  log: (line: string) => void,
+  armored = false,
+): void {
+  runSign(
+    repoId,
+    fingerprint,
+    armored ? ['--armor', '--detach-sign'] : ['--detach-sign'],
+    input,
+    output,
+    log,
+  );
+}
+
+export function clearSign(
+  repoId: string,
+  fingerprint: string,
+  input: string,
+  output: string,
+  log: (line: string) => void,
+): void {
+  runSign(repoId, fingerprint, ['--clearsign'], input, output, log);
+}
+
 export function repoFingerprint(repoId: string): string | undefined {
   const key = db
     .select({ fingerprint: schema.gpgKeys.fingerprint })
@@ -49,7 +114,17 @@ export function generateRepoKey(repoId: string): string {
   ensureGpgHome(repoId);
   const result = spawnSync(
     'gpg',
-    [...gpgArgs(repoId), '--batch', '--passphrase', '', '--quick-gen-key', `Packratter ${repoId}`, 'default', 'default', 'never'],
+    [
+      ...gpgArgs(repoId),
+      '--batch',
+      '--passphrase',
+      '',
+      '--quick-gen-key',
+      `Packratter ${repoId}`,
+      'default',
+      'default',
+      'never',
+    ],
     { encoding: 'utf8', env: { ...process.env, LC_ALL: 'C' } },
   );
   if (result.status !== 0) {
@@ -80,7 +155,11 @@ export function generateRepoKey(repoId: string): string {
   db.insert(schema.gpgKeys)
     .values({ id: randomUUID(), fingerprint, publicArmored: pub.stdout, createdAt: nowSeconds() })
     .run();
-  const keyRow = db.select().from(schema.gpgKeys).where(eq(schema.gpgKeys.fingerprint, fingerprint)).all()[0];
+  const keyRow = db
+    .select()
+    .from(schema.gpgKeys)
+    .where(eq(schema.gpgKeys.fingerprint, fingerprint))
+    .all()[0];
   if (!keyRow) {
     throw new Error('gpg key row not found after insert');
   }

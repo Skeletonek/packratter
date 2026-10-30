@@ -12,6 +12,8 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [sveltekit()],
     server: {
+      // Expose externally when run inside a container (see docker-compose.dev.yml).
+      host: process.env.VITE_HOST === '1',
       proxy: {
         '/api/v1': `http://127.0.0.1:${apiPort}`,
         '/r': `http://127.0.0.1:${apiPort}`,

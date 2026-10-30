@@ -1,0 +1,28 @@
+# Full integration test suite inside the toolchain container, so developers
+# don't need apt-ftparchive / createrepo_c / flatpak on their host.
+#   docker compose -f docker-compose.test.yml run --rm packratter-tests
+# Dependencies (incl. node_modules) live inside the volumes below — the host
+# repo and its node_modules are never touched. Volumes persist, so the first
+# run installs, later runs are incremental.
+
+services:
+  packratter-tests:
+    image: packratter-dev:latest
+    # Default bridge instead of the compose network: aardvark-dns (podman's
+    # per-network DNS) can be flaky here (EAI_AGAIN on registry fetches), while
+    # the default network resolves via the host resolver. The container talks
+    # to no siblings, so the project network buys nothing.
+    network_mode: bridge
+    volumes:
+      - ./:/app
+      - test_node_modules:/app/node_modules
+      - test_ui_node_modules:/app/ui/node_modules
+      - test_pnpm_home:/root/.local/share/pnpm
+    environment:
+      - CI=true
+    command: ['sh', '-c', 'pnpm install && pnpm test:full']
+
+volumes:
+  test_node_modules:
+  test_ui_node_modules:
+  test_pnpm_home:

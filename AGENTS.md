@@ -34,4 +34,4 @@ If no users exist, the service creates the `ADMIN_USER` account from the environ
 
 ## Stages
 
-See `STAGES.md`. Current progress: **S2 complete** (flatpak bundle import + GPG-signed OSTree summary + serve + real `flatpak remote-add` client verification, gated by `ENABLE_FLATPAK=1`).
+See `STAGES.md`. Current progress: **S3 complete** (deb + rpm import and serve, verified with real `apt-get` and `dnf` clients in containers).
