@@ -1,11 +1,12 @@
 import { createHash } from 'node:crypto';
-import { mkdirSync, renameSync, unlinkSync } from 'node:fs';
+import { linkSync, mkdirSync, renameSync, unlinkSync } from 'node:fs';
 import { dirname, join, basename } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { eq } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import * as schema from '../db/schema.js';
 import { ensureRepoEnvDir, repoEnvDir } from '../lib/paths.js';
+import { run } from '../lib/exec.js';
 import { detachSign, gpgHome, repoFingerprint } from '../gpg/index.js';
 import type { EnvRef, PackageMeta, ValidationResult } from './types.js';
 
@@ -96,7 +97,18 @@ export function removePackage(
   } catch {}
 }
 
-export function rebuild(env: EnvRef, log: (line: string) => void): void {
+export function promote(
+  src: EnvRef,
+  dst: EnvRef,
+  pkg: { filename: string; arch: string | null; ref: string | null },
+): void {
+  linkSync(
+    join(repoEnvDir(src.repoId, src.id), pkg.filename),
+    join(ensureRepoEnvDir(dst.repoId, dst.id), pkg.filename),
+  );
+}
+
+export async function rebuild(env: EnvRef, log: (line: string) => void): Promise<void> {
   const dir = repoEnvDir(env.repoId, env.id);
   const repo = db.select().from(schema.repos).where(eq(schema.repos.id, env.repoId)).all()[0];
   if (!repo) {
@@ -126,26 +138,21 @@ export function rebuild(env: EnvRef, log: (line: string) => void): void {
 
   const gpgEnv = { ...process.env, LC_ALL: 'C', GNUPGHOME: gpgHome(env.repoId) };
 
-  const result = spawnSync('repo-add', [`${repo.name}.db.tar.gz`, ...pkgs.map((p) => p.filename)], {
-    cwd: dir,
-    encoding: 'utf8',
-    env: gpgEnv,
-  });
+  await run(
+    'repo-add',
+    [`${repo.name}.db.tar.gz`, ...pkgs.map((p) => p.filename)],
+    { cwd: dir, env: gpgEnv },
+    log,
+  );
 
-  if (result.stdout) log(result.stdout);
-  if (result.stderr) log(result.stderr);
-  if (result.status !== 0) {
-    throw new Error(`repo-add failed with code ${result.status}`);
-  }
-
-  const signFile = (name: string) => {
-    detachSign(env.repoId, fingerprint, join(dir, name), join(dir, `${name}.sig`), log);
+  const signFile = async (name: string) => {
+    await detachSign(env.repoId, fingerprint, join(dir, name), join(dir, `${name}.sig`), log);
   };
 
-  signFile(`${repo.name}.db`);
-  signFile(`${repo.name}.files`);
+  await signFile(`${repo.name}.db`);
+  await signFile(`${repo.name}.files`);
   for (const pkg of pkgs) {
-    signFile(pkg.filename);
+    await signFile(pkg.filename);
   }
 }
 
@@ -167,20 +174,19 @@ export function serveHeaders(path: string): Record<string, string> {
 }
 
 export function setupSnippet(
-  repoId: string,
   repoName: string,
   baseUrl: string,
   envName: string,
   fingerprint: string,
 ): string {
   return `keyfile=$(mktemp)
-curl -fsSL ${baseUrl}/api/v1/repos/${repoId}/${envName}/gpg-public-key -o "$keyfile"
+curl -fsSL ${baseUrl}/api/v1/repos/${repoName}/${envName}/gpg-public-key -o "$keyfile"
 sudo pacman-key --add "$keyfile"
 rm -f "$keyfile"
 sudo pacman-key --lsign-key ${fingerprint}
 
 [${repoName}]
-Server = ${baseUrl}/r/${repoId}/${envName}
+Server = ${baseUrl}/r/${repoName}/${envName}
 SigLevel = Required DatabaseOptional
 `;
 }

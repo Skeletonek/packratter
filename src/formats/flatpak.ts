@@ -1,8 +1,17 @@
 import { createHash } from 'node:crypto';
-import { mkdirSync, renameSync, unlinkSync, existsSync, rmSync, mkdtempSync } from 'node:fs';
+import {
+  linkSync,
+  mkdirSync,
+  renameSync,
+  unlinkSync,
+  existsSync,
+  rmSync,
+  mkdtempSync,
+} from 'node:fs';
 import { join, basename } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { ensureRepoEnvDir } from '../lib/paths.js';
+import { run } from '../lib/exec.js';
 import { gpgHome, repoFingerprint } from '../gpg/index.js';
 import { config } from '../config.js';
 import type { EnvRef, PackageMeta, ValidationResult } from './types.js';
@@ -115,45 +124,55 @@ export function removePackage(
   }
 }
 
-function signAllCommits(env: EnvRef, fingerprint: string, log: (line: string) => void): void {
-  const repo = ostreeRepo(env);
-  const refs = spawnSync('ostree', ['refs', '--repo', repo], {
+export function promote(
+  src: EnvRef,
+  dst: EnvRef,
+  pkg: { filename: string; arch: string | null; ref: string | null },
+): void {
+  const dest = join(bundlesDir(dst), pkg.filename);
+  mkdirSync(bundlesDir(dst), { recursive: true });
+  linkSync(join(bundlesDir(src), pkg.filename), dest);
+
+  // Ostree content cannot be hardlinked across repos, so the bundle is
+  // re-imported into the target env's ostree repo.
+  ensureOstreeRepo(dst);
+  const importBundle = spawnSync('flatpak', ['build-import-bundle', ostreeRepo(dst), dest], {
     encoding: 'utf8',
     env: { ...process.env, LC_ALL: 'C' },
   });
-  if (refs.status !== 0) {
-    throw new Error(`ostree refs failed: ${refs.stderr}`);
+  if (importBundle.status !== 0) {
+    throw new Error(`flatpak build-import-bundle failed: ${importBundle.stderr}`);
   }
+}
+
+async function signAllCommits(
+  env: EnvRef,
+  fingerprint: string,
+  log: (line: string) => void,
+): Promise<void> {
+  const repo = ostreeRepo(env);
+  const refs = await run('ostree', ['refs', '--repo', repo], {
+    env: { ...process.env, LC_ALL: 'C' },
+  });
 
   for (const ref of refs.stdout
     .split('\n')
     .map((line) => line.trim())
     .filter(Boolean)) {
-    const rev = spawnSync('ostree', ['rev-parse', '--repo', repo, ref], {
-      encoding: 'utf8',
+    const rev = await run('ostree', ['rev-parse', '--repo', repo, ref], {
       env: { ...process.env, LC_ALL: 'C' },
     });
-    if (rev.status !== 0) {
-      throw new Error(`ostree rev-parse failed: ${rev.stderr}`);
-    }
     const commit = rev.stdout.trim();
-    const sign = spawnSync(
+    await run(
       'ostree',
       ['gpg-sign', '--repo', repo, '--gpg-homedir', gpgHome(env.repoId), commit, fingerprint],
-      {
-        encoding: 'utf8',
-        env: { ...process.env, LC_ALL: 'C' },
-      },
+      { env: { ...process.env, LC_ALL: 'C' } },
+      log,
     );
-    if (sign.stdout) log(sign.stdout);
-    if (sign.stderr) log(sign.stderr);
-    if (sign.status !== 0) {
-      throw new Error(`ostree gpg-sign failed for ${ref}: ${sign.stderr}`);
-    }
   }
 }
 
-export function rebuild(env: EnvRef, log: (line: string) => void): void {
+export async function rebuild(env: EnvRef, log: (line: string) => void): Promise<void> {
   const repo = ostreeRepo(env);
   ensureOstreeRepo(env);
 
@@ -162,21 +181,14 @@ export function rebuild(env: EnvRef, log: (line: string) => void): void {
     throw new Error('repo has no signing key');
   }
 
-  signAllCommits(env, fingerprint, log);
+  await signAllCommits(env, fingerprint, log);
 
-  const update = spawnSync(
+  await run(
     'flatpak',
     ['build-update-repo', '--gpg-sign', fingerprint, '--gpg-homedir', gpgHome(env.repoId), repo],
-    {
-      encoding: 'utf8',
-      env: { ...process.env, LC_ALL: 'C' },
-    },
+    { env: { ...process.env, LC_ALL: 'C' } },
+    log,
   );
-  if (update.stdout) log(update.stdout);
-  if (update.stderr) log(update.stderr);
-  if (update.status !== 0) {
-    throw new Error(`flatpak build-update-repo failed with code ${update.status}`);
-  }
 }
 
 export function serveHeaders(path: string): Record<string, string> {
@@ -191,15 +203,14 @@ export function serveHeaders(path: string): Record<string, string> {
 }
 
 export function setupSnippet(
-  repoId: string,
   repoName: string,
   baseUrl: string,
   envName: string,
   _fingerprint: string,
 ): string {
   return `keyfile=$(mktemp)
-curl -fsSL ${baseUrl}/api/v1/repos/${repoId}/${envName}/gpg-public-key -o "$keyfile"
-flatpak remote-add --user --gpg-import="$keyfile" ${repoName} ${baseUrl}/r/${repoId}/${envName}/flatpak/ostree/
+curl -fsSL ${baseUrl}/api/v1/repos/${repoName}/${envName}/gpg-public-key -o "$keyfile"
+flatpak remote-add --user --gpg-import="$keyfile" ${repoName} ${baseUrl}/r/${repoName}/${envName}/flatpak/ostree/
 rm -f "$keyfile"
 
 # Replace <app-id> with the application you want to install

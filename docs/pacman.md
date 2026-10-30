@@ -19,7 +19,7 @@ The filename is read from `.PKGINFO`, so the uploaded file can have any name.
 curl -T mypackage.pkg.tar.zst \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/octet-stream" \
-  http://localhost:5000/api/v1/repos/<repo-id>/stable/packages
+  http://localhost:5000/api/v1/repos/<repo-name>/stable/packages
 ```
 
 ## Wait for the rebuild
@@ -33,7 +33,7 @@ curl http://localhost:5000/api/v1/jobs/<job-id>
 Fetch the setup snippet and add it to `/etc/pacman.conf`:
 
 ```bash
-curl http://localhost:5000/api/v1/repos/<repo-id>/stable/setup-snippet
+curl http://localhost:5000/api/v1/repos/<repo-name>/stable/setup-snippet
 ```
 
 Then run `pacman -Sy` and install from the repo.

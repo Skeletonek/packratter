@@ -35,28 +35,26 @@ export async function enqueueRebuild(repoId: string, envId: string): Promise<str
     throw new Error('env not found');
   }
 
-  const logLines: string[] = [];
-  const log = (line: string) => logLines.push(line);
+  const logText: { value: string } = { value: '' };
+  const log = (line: string) => {
+    logText.value += (logText.value ? '\n' : '') + line;
+    db.update(schema.jobs).set({ log: logText.value }).where(eq(schema.jobs.id, jobId)).run();
+  };
 
   void queueFor(repoId, envId).add(async () => {
     db.update(schema.jobs).set({ status: 'running' }).where(eq(schema.jobs.id, jobId)).run();
     try {
       const repo = db.select().from(schema.repos).where(eq(schema.repos.id, repoId)).all()[0];
       if (!repo) throw new Error('repo not found');
-      formats[repo.type as RepoType].rebuild(env, log);
+      await formats[repo.type as RepoType].rebuild(env, log);
       db.update(schema.packages)
         .set({ status: 'ready' })
         .where(eq(schema.packages.envId, env.id))
         .run();
-      db.update(schema.jobs)
-        .set({ status: 'done', log: logLines.join('\n') })
-        .where(eq(schema.jobs.id, jobId))
-        .run();
+      db.update(schema.jobs).set({ status: 'done' }).where(eq(schema.jobs.id, jobId)).run();
     } catch (err) {
-      db.update(schema.jobs)
-        .set({ status: 'error', log: [logLines.join('\n'), String(err)].join('\n') })
-        .where(eq(schema.jobs.id, jobId))
-        .run();
+      log(String(err));
+      db.update(schema.jobs).set({ status: 'error' }).where(eq(schema.jobs.id, jobId)).run();
     }
   });
 

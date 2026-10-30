@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.4.0 — 2026-10-30
+
+### Changes
+
+- Repository URLs now use the repo name instead of its internal id
+- Repositories can now have multiple environments (like `testing` and `stable`)
+- A new Promote tab moves packages between environments
+- The repo page now shows job history with live logs and a Retry button for finished jobs.
+
+### Security
+
+- Write API requests now require a bearer token, settable in the web UI via the key button in the top bar.
+
+### Fixes
+
+- Invalid request payloads now return `400 VALIDATION_ERROR` instead of a generic 500.
+
 ## 0.3.0 — 2026-10-30
 
 ### Changes

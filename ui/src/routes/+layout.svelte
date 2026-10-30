@@ -3,6 +3,7 @@
   import { resolve } from '$app/paths';
   import ErrorDialog from '$lib/ErrorDialog.svelte';
   import ThemeToggle from '$lib/ThemeToggle.svelte';
+  import TokenInput from '$lib/TokenInput.svelte';
   import { version, buildTime } from '$lib/buildInfo.js';
 </script>
 
@@ -13,6 +14,7 @@
       <span class="fw-semibold">Packratter</span>
     </a>
     <div class="d-flex align-items-center gap-3">
+      <TokenInput />
       <ThemeToggle />
     </div>
   </div>

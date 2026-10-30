@@ -10,6 +10,7 @@ import { generateToken } from '../src/auth/tokens.js';
 import { applyMigrations, db } from '../src/db/index.js';
 import * as schema from '../src/db/schema.js';
 import { buildServer } from '../src/server.js';
+import { waitForJob } from './helpers.js';
 
 // Prebuilt fixture: flatpak build-init requires the org.freedesktop.Platform
 // runtime to be installed, which neither the host nor the toolchain container
@@ -21,7 +22,7 @@ const fixturePath = fileURLToPath(
 
 let token = '';
 let server: FastifyInstance;
-let flatpakRepoId = '';
+let flatpakRepoName = '';
 
 function auth(): Record<string, string> {
   return { authorization: `Bearer ${token}` };
@@ -63,13 +64,13 @@ describe.skipIf(process.env.RUN_FULL_TESTS !== '1')('Flatpak repos', () => {
     expect(json.success).toBe(true);
     expect(json.data.type).toBe('flatpak');
     expect(json.data.envs).toEqual([expect.objectContaining({ name: 'stable' })]);
-    flatpakRepoId = json.data.id;
+    flatpakRepoName = json.data.name;
   });
 
   it('returns a usable flatpak setup snippet', async () => {
     const res = await server.inject({
       method: 'GET',
-      url: `/api/v1/repos/${flatpakRepoId}/stable/setup-snippet`,
+      url: `/api/v1/repos/${flatpakRepoName}/stable/setup-snippet`,
       headers: auth(),
     });
 
@@ -83,7 +84,7 @@ describe.skipIf(process.env.RUN_FULL_TESTS !== '1')('Flatpak repos', () => {
   it('rejects an invalid bundle with VALIDATION_ERROR', async () => {
     const res = await server.inject({
       method: 'PUT',
-      url: `/api/v1/repos/${flatpakRepoId}/stable/packages`,
+      url: `/api/v1/repos/${flatpakRepoName}/stable/packages`,
       headers: { ...auth(), 'Content-Type': 'application/octet-stream' },
       payload: Buffer.from('not a flatpak bundle'),
     });
@@ -97,7 +98,7 @@ describe.skipIf(process.env.RUN_FULL_TESTS !== '1')('Flatpak repos', () => {
 
     const uploadRes = await server.inject({
       method: 'PUT',
-      url: `/api/v1/repos/${flatpakRepoId}/stable/packages`,
+      url: `/api/v1/repos/${flatpakRepoName}/stable/packages`,
       headers: { ...auth(), 'Content-Type': 'application/octet-stream' },
       payload: bundle,
     });
@@ -124,14 +125,47 @@ describe.skipIf(process.env.RUN_FULL_TESTS !== '1')('Flatpak repos', () => {
 
     const summaryRes = await server.inject({
       method: 'GET',
-      url: `/r/${flatpakRepoId}/stable/flatpak/ostree/summary`,
+      url: `/r/${flatpakRepoName}/stable/flatpak/ostree/summary`,
     });
     expect(summaryRes.statusCode).toBe(200);
 
     const summarySigRes = await server.inject({
       method: 'GET',
-      url: `/r/${flatpakRepoId}/stable/flatpak/ostree/summary.sig`,
+      url: `/r/${flatpakRepoName}/stable/flatpak/ostree/summary.sig`,
     });
     expect(summarySigRes.statusCode).toBe(200);
+  });
+
+  it('promotes a bundle between envs', async () => {
+    const envRes = await server.inject({
+      method: 'POST',
+      url: `/api/v1/repos/${flatpakRepoName}/envs`,
+      headers: auth(),
+      payload: { name: 'testing' },
+    });
+    expect(envRes.statusCode).toBe(201);
+
+    const res = await server.inject({
+      method: 'POST',
+      url: `/api/v1/repos/${flatpakRepoName}/promote`,
+      headers: auth(),
+      payload: { from: 'stable', to: 'testing' },
+    });
+    expect(res.statusCode).toBe(202);
+    expect(res.json().data).toEqual({ jobId: expect.any(String), promoted: 1, skipped: 0 });
+    const job = await waitForJob(server, auth(), res.json().data.jobId);
+    expect(job.status).toBe('done');
+
+    const summary = await server.inject({
+      method: 'GET',
+      url: `/r/${flatpakRepoName}/testing/flatpak/ostree/summary`,
+    });
+    expect(summary.statusCode).toBe(200);
+
+    const sig = await server.inject({
+      method: 'GET',
+      url: `/r/${flatpakRepoName}/testing/flatpak/ostree/summary.sig`,
+    });
+    expect(sig.statusCode).toBe(200);
   });
 });

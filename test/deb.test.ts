@@ -13,10 +13,11 @@ import { applyMigrations, db } from '../src/db/index.js';
 import * as schema from '../src/db/schema.js';
 import { buildServer } from '../src/server.js';
 import * as deb from '../src/formats/deb.js';
+import { waitForJob } from './helpers.js';
 
 let token = '';
 let server: FastifyInstance;
-let repoId = '';
+let repoName = '';
 
 function auth(): Record<string, string> {
   return { authorization: `Bearer ${token}` };
@@ -80,11 +81,11 @@ describe('deb format', () => {
   });
 
   it('produces a setup snippet with a signed-by keyring and sources.list entry', () => {
-    const snippet = deb.setupSnippet('rid', 'myrepo', 'http://localhost:5000', 'stable', 'fpr');
+    const snippet = deb.setupSnippet('myrepo', 'http://localhost:5000', 'stable', 'fpr');
     expect(snippet).toContain('gpg --dearmor');
     expect(snippet).toContain('signed-by=/usr/share/keyrings/myrepo.gpg');
     expect(snippet).toContain(
-      'deb [signed-by=/usr/share/keyrings/myrepo.gpg] http://localhost:5000/r/rid/stable/deb stable main',
+      'deb [signed-by=/usr/share/keyrings/myrepo.gpg] http://localhost:5000/r/myrepo/stable/deb stable main',
     );
     expect(snippet).toContain('/etc/apt/sources.list.d/myrepo.list');
     expect(snippet).toContain('apt-get update');
@@ -119,13 +120,13 @@ describe.skipIf(
     expect(json.success).toBe(true);
     expect(json.data.type).toBe('deb');
     expect(json.data.envs).toEqual([expect.objectContaining({ name: 'stable' })]);
-    repoId = json.data.id;
+    repoName = json.data.name;
   });
 
   it('rejects an invalid package with VALIDATION_ERROR', async () => {
     const res = await server.inject({
       method: 'PUT',
-      url: `/api/v1/repos/${repoId}/stable/packages`,
+      url: `/api/v1/repos/${repoName}/stable/packages`,
       headers: { ...auth(), 'Content-Type': 'application/octet-stream' },
       payload: Buffer.from('not a debian package'),
     });
@@ -137,7 +138,7 @@ describe.skipIf(
   it('uploads a real package, rebuilds, and serves dists/pool files', async () => {
     const uploadRes = await server.inject({
       method: 'PUT',
-      url: `/api/v1/repos/${repoId}/stable/packages`,
+      url: `/api/v1/repos/${repoName}/stable/packages`,
       headers: { ...auth(), 'Content-Type': 'application/octet-stream' },
       payload: buildTestDeb(),
     });
@@ -162,28 +163,68 @@ describe.skipIf(
 
     const inRelease = await server.inject({
       method: 'GET',
-      url: `/r/${repoId}/stable/deb/dists/stable/InRelease`,
+      url: `/r/${repoName}/stable/deb/dists/stable/InRelease`,
     });
     expect(inRelease.statusCode).toBe(200);
     expect(inRelease.body).toContain('-----BEGIN PGP SIGNED MESSAGE-----');
 
     const releaseGpg = await server.inject({
       method: 'GET',
-      url: `/r/${repoId}/stable/deb/dists/stable/Release.gpg`,
+      url: `/r/${repoName}/stable/deb/dists/stable/Release.gpg`,
     });
     expect(releaseGpg.statusCode).toBe(200);
 
     const packages = await server.inject({
       method: 'GET',
-      url: `/r/${repoId}/stable/deb/dists/stable/main/binary-amd64/Packages`,
+      url: `/r/${repoName}/stable/deb/dists/stable/main/binary-amd64/Packages`,
     });
     expect(packages.statusCode).toBe(200);
     expect(packages.body).toContain('Filename: pool/amd64/guinea-mpeg_0.12.0-1_amd64.deb');
 
     const pkgRes = await server.inject({
       method: 'GET',
-      url: `/r/${repoId}/stable/deb/pool/amd64/guinea-mpeg_0.12.0-1_amd64.deb`,
+      url: `/r/${repoName}/stable/deb/pool/amd64/guinea-mpeg_0.12.0-1_amd64.deb`,
     });
     expect(pkgRes.statusCode).toBe(200);
+  });
+
+  it('promotes packages between envs byte-identically', async () => {
+    const envRes = await server.inject({
+      method: 'POST',
+      url: `/api/v1/repos/${repoName}/envs`,
+      headers: auth(),
+      payload: { name: 'testing' },
+    });
+    expect(envRes.statusCode).toBe(201);
+
+    const res = await server.inject({
+      method: 'POST',
+      url: `/api/v1/repos/${repoName}/promote`,
+      headers: auth(),
+      payload: { from: 'stable', to: 'testing' },
+    });
+    expect(res.statusCode).toBe(202);
+    expect(res.json().data).toEqual({ jobId: expect.any(String), promoted: 1, skipped: 0 });
+    const job = await waitForJob(server, auth(), res.json().data.jobId);
+    expect(job.status).toBe('done');
+
+    const stablePkg = await server.inject({
+      method: 'GET',
+      url: `/r/${repoName}/stable/deb/pool/amd64/guinea-mpeg_0.12.0-1_amd64.deb`,
+    });
+    const testingPkg = await server.inject({
+      method: 'GET',
+      url: `/r/${repoName}/testing/deb/pool/amd64/guinea-mpeg_0.12.0-1_amd64.deb`,
+    });
+    expect(stablePkg.statusCode).toBe(200);
+    expect(testingPkg.statusCode).toBe(200);
+    expect(testingPkg.rawPayload.equals(stablePkg.rawPayload)).toBe(true);
+
+    const index = await server.inject({
+      method: 'GET',
+      url: `/r/${repoName}/testing/deb/dists/testing/main/binary-amd64/Packages`,
+    });
+    expect(index.statusCode).toBe(200);
+    expect(index.body).toContain('Filename: pool/amd64/guinea-mpeg_0.12.0-1_amd64.deb');
   });
 });

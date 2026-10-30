@@ -12,7 +12,9 @@ or on error:
 { "success": false, "error": { "code": "...", "message": "..." } }
 ```
 
-Writes require a bearer token (`Authorization: Bearer <token>`). Public read endpoints are marked below.
+All reads are public. Writes require a bearer token (`Authorization: Bearer <token>`).
+
+In URLs, `:repo` is the repository name and `:env` the environment name (e.g. `/r/myrepo/stable/...`), not internal ids.
 
 ## Health
 
@@ -81,6 +83,45 @@ Response: `202 Accepted`
 
 Delete a package and enqueue a rebuild.
 
+## Environments
+
+### `POST /api/v1/repos/:repo/envs`
+
+Create an environment (e.g. `testing`). `name` must match `[a-z0-9-]+` and be unique within the repo.
+
+Request:
+
+```json
+{ "name": "testing" }
+```
+
+Response: `201 Created`
+
+### `GET /api/v1/repos/:repo/diff` (public)
+
+Compare two environments: `?from=<env>&to=<env>`. Returns package lists `onlyInFrom`, `onlyInTo`, and `different` (same filename, different content).
+
+### `POST /api/v1/repos/:repo/promote`
+
+Promote packages from one environment to another. Packages already present in the target (same filename) are skipped. Returns a rebuild job for the target env.
+
+Request:
+
+```json
+{ "from": "testing", "to": "stable", "filenames": ["pkg-1.0.0-1-x86_64.pkg.tar.zst"] }
+```
+
+Omit `filenames` to promote everything. Response: `202 Accepted`
+
+```json
+{
+  "success": true,
+  "data": { "jobId": "<job-id>", "promoted": 1, "skipped": 0 }
+}
+```
+
+`jobId` is `null` when nothing was promoted and no rebuild was needed.
+
 ## Keys and setup
 
 ### `GET /api/v1/repos/:repo/:env/gpg-public-key` (public)
@@ -93,9 +134,17 @@ Returns client configuration instructions for the repository type (pacman.conf b
 
 ## Jobs
 
+### `GET /api/v1/jobs` (public)
+
+List job history, newest first. Filter with `?repo=<name>` (and `&env=<name>`); paginate with `?page=`.
+
 ### `GET /api/v1/jobs/:id` (public)
 
-Get job status and log.
+Get job status and log. The log is written incrementally while the job runs.
+
+### `POST /api/v1/jobs/:id/retry`
+
+Re-run a finished job's rebuild. Returns `202 Accepted` with a new `jobId`.
 
 ## Static serving
 

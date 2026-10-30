@@ -6,7 +6,7 @@ Host-only repository manager for `deb`, `rpm`, `pacman` and `flatpak` packages.
 
 **Currently very much work in progress.**
 
-As of now it supports pacman, deb, rpm and flatpak repositories (flatpak with `ENABLE_FLATPAK=1` env). Create repos, upload packages or bundles then serve everything under `/r/`. Packratter will manage all maintenance stuff like GPG signing and metadata rebuilding.
+As of now it supports pacman, deb, rpm and flatpak repositories (flatpak with `ENABLE_FLATPAK=1` env). Create repos, upload packages or bundles then serve everything under `/r/`. Packratter will manage all maintenance stuff like GPG signing and metadata rebuilding. Each repo can have multiple environments (like `testing` and `stable`) and packages can be promoted between them.
 
 The web UI lives at `/app` and is styled with Bootstrap 5, including light and dark themes.
 

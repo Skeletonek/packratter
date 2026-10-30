@@ -1,23 +1,15 @@
-import { FastifyPluginAsync } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { eq } from 'drizzle-orm';
 import { db } from '../../db/index.js';
 import * as schema from '../../db/schema.js';
 import { verifyToken } from '../../auth/tokens.js';
 import { AppError } from '../../errors.js';
 
-const authPlugin: FastifyPluginAsync = async (fastify) => {
-  fastify.addHook('preHandler', async (request) => {
-    if (request.url === '/healthz' || request.url.startsWith('/r/')) {
-      return;
-    }
-
-    // Repo public key and setup snippet must be fetchable without a token so package
-    // managers and copied curl commands work on the client host.
-    if (
-      request.method === 'GET' &&
-      request.url.startsWith('/api/v1/repos/') &&
-      (request.url.endsWith('/gpg-public-key') || request.url.endsWith('/setup-snippet'))
-    ) {
+// Registered on the root instance instead of as an encapsulated plugin: a
+// plugin's hook only covers its own context, so sibling routes would skip auth.
+export function registerAuth(app: FastifyInstance) {
+  app.addHook('preHandler', async (request) => {
+    if (request.method === 'GET' || request.method === 'HEAD') {
       return;
     }
 
@@ -46,6 +38,4 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
 
     request.user = { id: user.id, login: user.login, role: user.role };
   });
-};
-
-export default authPlugin;
+}

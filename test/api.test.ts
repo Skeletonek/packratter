@@ -15,7 +15,7 @@ import { buildServer } from '../src/server.js';
 
 let token = '';
 let server: FastifyInstance;
-let repoId = '';
+let repoName = '';
 
 function auth(): Record<string, string> {
   return { authorization: `Bearer ${token}` };
@@ -30,7 +30,10 @@ function buildTestPackage(): Buffer {
     'pkgname = guinea-mpeg\npkgver = 0.12.0-1\npkgrel = 1\narch = x86_64\n',
   );
   const pkgPath = join(base, 'guinea-mpeg-0.12.0-1-1-x86_64.pkg.tar.zst');
-  const result = spawnSync('bsdtar', ['-c', '--zstd', '-f', pkgPath, '.PKGINFO'], { cwd, encoding: 'utf8' });
+  const result = spawnSync('bsdtar', ['-c', '--zstd', '-f', pkgPath, '.PKGINFO'], {
+    cwd,
+    encoding: 'utf8',
+  });
   if (result.status !== 0 || result.error) {
     throw new Error(`bsdtar failed: ${result.error?.message ?? result.stderr}`);
   }
@@ -73,16 +76,14 @@ describe.skipIf(process.env.RUN_FULL_TESTS !== '1')('API used by the repo pages'
     expect(res.statusCode).toBe(201);
     const json = res.json();
     expect(json.success).toBe(true);
-    repoId = json.data.id;
-    expect(json.data.envs).toEqual([
-      expect.objectContaining({ name: 'stable' }),
-    ]);
+    repoName = json.data.name;
+    expect(json.data.envs).toEqual([expect.objectContaining({ name: 'stable' })]);
   });
 
   it('lists packages of /:repo/stable — the exact route the UI and repo page hit', async () => {
     const res = await server.inject({
       method: 'GET',
-      url: `/api/v1/repos/${repoId}/stable/packages`,
+      url: `/api/v1/repos/${repoName}/stable/packages`,
       headers: auth(),
     });
 
@@ -94,7 +95,7 @@ describe.skipIf(process.env.RUN_FULL_TESTS !== '1')('API used by the repo pages'
   it('404s for a nonexistent env name with NOT_FOUND', async () => {
     const res = await server.inject({
       method: 'GET',
-      url: `/api/v1/repos/${repoId}/testing/packages`,
+      url: `/api/v1/repos/${repoName}/testing/packages`,
       headers: auth(),
     });
 
@@ -105,7 +106,7 @@ describe.skipIf(process.env.RUN_FULL_TESTS !== '1')('API used by the repo pages'
   it('exposes the repo public key as armored text', async () => {
     const res = await server.inject({
       method: 'GET',
-      url: `/api/v1/repos/${repoId}/stable/gpg-public-key`,
+      url: `/api/v1/repos/${repoName}/stable/gpg-public-key`,
     });
 
     expect(res.statusCode).toBe(200);
@@ -116,7 +117,7 @@ describe.skipIf(process.env.RUN_FULL_TESTS !== '1')('API used by the repo pages'
     for (const contentType of ['application/octet-stream', 'application/zstd']) {
       const res = await server.inject({
         method: 'PUT',
-        url: `/api/v1/repos/${repoId}/stable/packages`,
+        url: `/api/v1/repos/${repoName}/stable/packages`,
         headers: { ...auth(), 'Content-Type': contentType },
         payload: Buffer.from('not a valid package'),
       });
@@ -129,7 +130,7 @@ describe.skipIf(process.env.RUN_FULL_TESTS !== '1')('API used by the repo pages'
   it('returns a usable setup snippet with key import, fingerprint and repo URL', async () => {
     const res = await server.inject({
       method: 'GET',
-      url: `/api/v1/repos/${repoId}/stable/setup-snippet`,
+      url: `/api/v1/repos/${repoName}/stable/setup-snippet`,
       headers: auth(),
     });
 
@@ -140,7 +141,7 @@ describe.skipIf(process.env.RUN_FULL_TESTS !== '1')('API used by the repo pages'
     expect(snippet).toContain('curl -fsSL');
     expect(snippet).toContain('sudo pacman-key --add "$keyfile"');
     expect(snippet).toContain('sudo pacman-key --lsign-key');
-    expect(snippet).toContain(`Server = ${`http://localhost:5000`}/r/${repoId}/stable`);
+    expect(snippet).toContain(`Server = ${`http://localhost:5000`}/r/${repoName}/stable`);
     expect(snippet).toContain('SigLevel = Required DatabaseOptional');
   });
 
@@ -148,7 +149,7 @@ describe.skipIf(process.env.RUN_FULL_TESTS !== '1')('API used by the repo pages'
     const pkgBytes = buildTestPackage();
     const uploadRes = await server.inject({
       method: 'PUT',
-      url: `/api/v1/repos/${repoId}/stable/packages`,
+      url: `/api/v1/repos/${repoName}/stable/packages`,
       headers: { ...auth(), 'Content-Type': 'application/octet-stream' },
       payload: pkgBytes,
     });
@@ -173,21 +174,27 @@ describe.skipIf(process.env.RUN_FULL_TESTS !== '1')('API used by the repo pages'
 
     expect(job?.status).toBe('done');
 
-    const dbRes = await server.inject({ method: 'GET', url: `/r/${repoId}/stable/api-test-repo.db` });
+    const dbRes = await server.inject({
+      method: 'GET',
+      url: `/r/${repoName}/stable/api-test-repo.db`,
+    });
     expect(dbRes.statusCode).toBe(200);
 
-    const dbSigRes = await server.inject({ method: 'GET', url: `/r/${repoId}/stable/api-test-repo.db.sig` });
+    const dbSigRes = await server.inject({
+      method: 'GET',
+      url: `/r/${repoName}/stable/api-test-repo.db.sig`,
+    });
     expect(dbSigRes.statusCode).toBe(200);
 
     const pkgRes = await server.inject({
       method: 'GET',
-      url: `/r/${repoId}/stable/guinea-mpeg-0.12.0-1-1-x86_64.pkg.tar.zst`,
+      url: `/r/${repoName}/stable/guinea-mpeg-0.12.0-1-1-x86_64.pkg.tar.zst`,
     });
     expect(pkgRes.statusCode).toBe(200);
 
     const pkgSigRes = await server.inject({
       method: 'GET',
-      url: `/r/${repoId}/stable/guinea-mpeg-0.12.0-1-1-x86_64.pkg.tar.zst.sig`,
+      url: `/r/${repoName}/stable/guinea-mpeg-0.12.0-1-1-x86_64.pkg.tar.zst.sig`,
     });
     expect(pkgSigRes.statusCode).toBe(200);
   });

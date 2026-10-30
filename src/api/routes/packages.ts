@@ -1,4 +1,5 @@
 import { FastifyPluginAsync } from 'fastify';
+import { z } from 'zod';
 import { eq, and } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, writeFileSync, unlinkSync } from 'node:fs';
@@ -8,6 +9,7 @@ import * as schema from '../../db/schema.js';
 import { AppError } from '../../errors.js';
 import { config } from '../../config.js';
 import { nowSeconds } from '../../lib/time.js';
+import { resolveEnv, resolveRepo } from '../../lib/repos.js';
 import { formats, type RepoType } from '../../formats/index.js';
 import type { PackageMeta } from '../../formats/types.js';
 import { enqueueRebuild } from '../../jobs/queue.js';
@@ -21,25 +23,25 @@ const uploadExtension: Record<RepoType, string> = {
   flatpak: '.flatpak',
 };
 
+const promoteSchema = z.object({
+  from: z.string().min(1),
+  to: z.string().min(1),
+  filenames: z.array(z.string().min(1)).optional(),
+});
+
 const packagesRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.put(
     '/:repo/:env/packages',
     { config: { bodyLimit: MAX_SIZE } },
     async (request, reply) => {
       const { repo, env } = request.params as { repo: string; env: string };
-      const repoRow = db.select().from(schema.repos).where(eq(schema.repos.id, repo)).all()[0];
-      if (!repoRow) throw new AppError('NOT_FOUND', 'repo not found', 404);
+      const repoRow = resolveRepo(repo);
       const format = formats[repoRow.type as RepoType];
       if (repoRow.type === 'flatpak' && !config.ENABLE_FLATPAK) {
         throw new AppError('NOT_IMPLEMENTED', 'Flatpak support is disabled', 400);
       }
 
-      const envRow = db
-        .select()
-        .from(schema.envs)
-        .where(and(eq(schema.envs.repoId, repo), eq(schema.envs.name, env)))
-        .all()[0];
-      if (!envRow) throw new AppError('NOT_FOUND', 'env not found', 404);
+      const envRow = resolveEnv(repoRow.id, env);
 
       const body = request.body as Buffer;
       if (!Buffer.isBuffer(body) || body.length === 0) {
@@ -82,7 +84,7 @@ const packagesRoutes: FastifyPluginAsync = async (fastify) => {
         })
         .run();
 
-      const jobId = await enqueueRebuild(repo, envRow.id);
+      const jobId = await enqueueRebuild(repoRow.id, envRow.id);
 
       reply.status(202);
       return { success: true, data: { jobId, filename: meta.filename } };
@@ -95,15 +97,8 @@ const packagesRoutes: FastifyPluginAsync = async (fastify) => {
       env: string;
       filename: string;
     };
-    const repoRow = db.select().from(schema.repos).where(eq(schema.repos.id, repo)).all()[0];
-    if (!repoRow) throw new AppError('NOT_FOUND', 'repo not found', 404);
-
-    const envRow = db
-      .select()
-      .from(schema.envs)
-      .where(and(eq(schema.envs.repoId, repo), eq(schema.envs.name, env)))
-      .all()[0];
-    if (!envRow) throw new AppError('NOT_FOUND', 'env not found', 404);
+    const repoRow = resolveRepo(repo);
+    const envRow = resolveEnv(repoRow.id, env);
 
     const pkg = db
       .select()
@@ -115,8 +110,76 @@ const packagesRoutes: FastifyPluginAsync = async (fastify) => {
     formats[repoRow.type as RepoType].removePackage(envRow, pkg);
     db.delete(schema.packages).where(eq(schema.packages.id, pkg.id)).run();
 
-    const jobId = await enqueueRebuild(repo, envRow.id);
+    const jobId = await enqueueRebuild(repoRow.id, envRow.id);
     return { success: true, data: { jobId } };
+  });
+
+  fastify.post('/:repo/promote', async (request, reply) => {
+    const { repo } = request.params as { repo: string };
+    const body = promoteSchema.parse(request.body);
+    if (body.from === body.to) {
+      throw new AppError('BAD_REQUEST', 'from and to must be different envs', 400);
+    }
+    const repoRow = resolveRepo(repo);
+    if (repoRow.type === 'flatpak' && !config.ENABLE_FLATPAK) {
+      throw new AppError('NOT_IMPLEMENTED', 'Flatpak support is disabled', 400);
+    }
+    const fromEnv = resolveEnv(repoRow.id, body.from);
+    const toEnv = resolveEnv(repoRow.id, body.to);
+
+    let fromPkgs = db
+      .select()
+      .from(schema.packages)
+      .where(eq(schema.packages.envId, fromEnv.id))
+      .all();
+    if (body.filenames) {
+      const wanted = new Set(body.filenames);
+      const selected = fromPkgs.filter((p) => wanted.has(p.filename));
+      if (selected.length !== wanted.size) {
+        throw new AppError('NOT_FOUND', 'some packages not found in source env', 404);
+      }
+      fromPkgs = selected;
+    }
+
+    const existing = new Set(
+      db
+        .select()
+        .from(schema.packages)
+        .where(eq(schema.packages.envId, toEnv.id))
+        .all()
+        .map((p) => p.filename),
+    );
+
+    const format = formats[repoRow.type as RepoType];
+    let promoted = 0;
+    let skipped = 0;
+    for (const pkg of fromPkgs) {
+      if (existing.has(pkg.filename)) {
+        skipped += 1;
+        continue;
+      }
+      format.promote(fromEnv, toEnv, pkg);
+      db.insert(schema.packages)
+        .values({
+          id: randomUUID(),
+          envId: toEnv.id,
+          filename: pkg.filename,
+          version: pkg.version,
+          arch: pkg.arch,
+          size: pkg.size,
+          sha256: pkg.sha256,
+          ref: pkg.ref,
+          status: 'pending',
+          createdAt: nowSeconds(),
+        })
+        .run();
+      promoted += 1;
+    }
+
+    const jobId = promoted > 0 ? await enqueueRebuild(repoRow.id, toEnv.id) : null;
+
+    reply.status(202);
+    return { success: true, data: { jobId, promoted, skipped } };
   });
 };
 

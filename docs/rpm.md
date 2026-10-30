@@ -17,7 +17,7 @@ curl -X POST http://localhost:5000/api/v1/repos \
 curl -T mypackage.rpm \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/octet-stream" \
-  http://localhost:5000/api/v1/repos/<repo-id>/stable/packages
+  http://localhost:5000/api/v1/repos/<repo-name>/stable/packages
 ```
 
 ## Wait for the rebuild
@@ -31,7 +31,7 @@ curl http://localhost:5000/api/v1/jobs/<job-id>
 Fetch the setup snippet and run it on the client:
 
 ```bash
-curl http://localhost:5000/api/v1/repos/<repo-id>/stable/setup-snippet
+curl http://localhost:5000/api/v1/repos/<repo-name>/stable/setup-snippet
 ```
 
 It writes a `.repo` file with `repo_gpgcheck=1` (the repodata is GPG-signed;

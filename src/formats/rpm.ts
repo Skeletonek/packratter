@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import {
   closeSync,
   existsSync,
+  linkSync,
   mkdirSync,
   openSync,
   readSync,
@@ -13,6 +14,7 @@ import {
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { ensureRepoEnvDir, repoEnvDir } from '../lib/paths.js';
+import { run } from '../lib/exec.js';
 import { detachSign, repoFingerprint } from '../gpg/index.js';
 import type { EnvRef, PackageMeta, ValidationResult } from './types.js';
 
@@ -97,7 +99,17 @@ export function removePackage(
   } catch {}
 }
 
-export function rebuild(env: EnvRef, log: (line: string) => void): void {
+export function promote(
+  src: EnvRef,
+  dst: EnvRef,
+  pkg: { filename: string; arch: string | null; ref: string | null },
+): void {
+  const packagesDir = join(rpmDir(dst), 'packages');
+  mkdirSync(packagesDir, { recursive: true });
+  linkSync(join(rpmRoot(src), 'packages', pkg.filename), join(packagesDir, pkg.filename));
+}
+
+export async function rebuild(env: EnvRef, log: (line: string) => void): Promise<void> {
   const root = rpmDir(env);
   const packagesDir = join(root, 'packages');
   const hasPackages =
@@ -108,21 +120,18 @@ export function rebuild(env: EnvRef, log: (line: string) => void): void {
     return;
   }
 
-  const result = spawnSync('createrepo_c', ['--update', '--general-compress-type=zstd', root], {
-    encoding: 'utf8',
-    env: { ...process.env, LC_ALL: 'C' },
-  });
-  if (result.stdout) log(result.stdout);
-  if (result.stderr) log(result.stderr);
-  if (result.status !== 0) {
-    throw new Error(`createrepo_c failed with code ${result.status}`);
-  }
+  await run(
+    'createrepo_c',
+    ['--update', '--general-compress-type=zstd', root],
+    { env: { ...process.env, LC_ALL: 'C' } },
+    log,
+  );
 
   const fingerprint = repoFingerprint(env.repoId);
   if (!fingerprint) {
     throw new Error('repo has no signing key');
   }
-  detachSign(
+  await detachSign(
     env.repoId,
     fingerprint,
     join(root, 'repodata', 'repomd.xml'),
@@ -140,7 +149,6 @@ export function serveHeaders(path: string): Record<string, string> {
 }
 
 export function setupSnippet(
-  repoId: string,
   repoName: string,
   baseUrl: string,
   envName: string,
@@ -149,11 +157,11 @@ export function setupSnippet(
   return `sudo tee /etc/yum.repos.d/${repoName}.repo > /dev/null <<EOF
 [${repoName}]
 name=${repoName}
-baseurl=${baseUrl}/r/${repoId}/${envName}/rpm
+baseurl=${baseUrl}/r/${repoName}/${envName}/rpm
 enabled=1
 gpgcheck=0
 repo_gpgcheck=1
-gpgkey=${baseUrl}/api/v1/repos/${repoId}/${envName}/gpg-public-key
+gpgkey=${baseUrl}/api/v1/repos/${repoName}/${envName}/gpg-public-key
 EOF
 
 sudo dnf makecache --refresh

@@ -22,13 +22,12 @@ export interface Format {
     env: EnvRef,
     pkg: { filename: string; arch: string | null; ref: string | null },
   ): void;
-  rebuild(env: EnvRef, log: (line: string) => void): void;
+  promote(
+    src: EnvRef,
+    dst: EnvRef,
+    pkg: { filename: string; arch: string | null; ref: string | null },
+  ): void;
+  rebuild(env: EnvRef, log: (line: string) => void): Promise<void>;
   serveHeaders(path: string): Record<string, string>;
-  setupSnippet(
-    repoId: string,
-    repoName: string,
-    baseUrl: string,
-    envName: string,
-    fingerprint: string,
-  ): string;
+  setupSnippet(repoName: string, baseUrl: string, envName: string, fingerprint: string): string;
 }

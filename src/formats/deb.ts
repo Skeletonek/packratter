@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import {
   closeSync,
   existsSync,
+  linkSync,
   mkdirSync,
   openSync,
   readSync,
@@ -15,6 +16,7 @@ import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { gzipSync } from 'node:zlib';
 import { ensureRepoEnvDir, repoEnvDir } from '../lib/paths.js';
+import { run } from '../lib/exec.js';
 import { clearSign, detachSign, repoFingerprint } from '../gpg/index.js';
 import type { EnvRef, PackageMeta, ValidationResult } from './types.js';
 
@@ -107,23 +109,33 @@ export function removePackage(
   } catch {}
 }
 
-function packagesFor(root: string, dirs: string[]): string {
+export function promote(
+  src: EnvRef,
+  dst: EnvRef,
+  pkg: { filename: string; arch: string | null; ref: string | null },
+): void {
+  if (!pkg.arch) throw new Error('package has no arch');
+  const poolDir = join(debDir(dst), 'pool', safeFilename(pkg.arch));
+  mkdirSync(poolDir, { recursive: true });
+  linkSync(
+    join(debRoot(src), 'pool', safeFilename(pkg.arch), pkg.filename),
+    join(poolDir, pkg.filename),
+  );
+}
+
+async function packagesFor(root: string, dirs: string[]): Promise<string> {
   const stanzas: string[] = [];
   for (const dir of dirs) {
-    const result = spawnSync('apt-ftparchive', ['packages', dir], {
+    const { stdout } = await run('apt-ftparchive', ['packages', dir], {
       cwd: root,
-      encoding: 'utf8',
       env: { ...process.env, LC_ALL: 'C' },
     });
-    if (result.status !== 0) {
-      throw new Error(`apt-ftparchive packages failed: ${result.stderr || result.status}`);
-    }
-    if (result.stdout.trim()) stanzas.push(result.stdout.trimEnd());
+    if (stdout.trim()) stanzas.push(stdout.trimEnd());
   }
   return stanzas.length > 0 ? `${stanzas.join('\n')}\n` : '';
 }
 
-export function rebuild(env: EnvRef, log: (line: string) => void): void {
+export async function rebuild(env: EnvRef, log: (line: string) => void): Promise<void> {
   const root = debDir(env);
   const poolDir = join(root, 'pool');
   const distsDir = join(root, 'dists', env.name);
@@ -146,7 +158,7 @@ export function rebuild(env: EnvRef, log: (line: string) => void): void {
   const hasAll = archs.includes('all');
   for (const arch of archs) {
     const dirs = arch === 'all' ? ['pool/all'] : [`pool/${arch}`, ...(hasAll ? ['pool/all'] : [])];
-    const packages = packagesFor(root, dirs);
+    const packages = await packagesFor(root, dirs);
     const outDir = join(distsDir, COMPONENT, `binary-${arch}`);
     mkdirSync(outDir, { recursive: true });
     writeAtomic(join(outDir, 'Packages'), packages);
@@ -169,15 +181,12 @@ export function rebuild(env: EnvRef, log: (line: string) => void): void {
   );
   let release: string;
   try {
-    const result = spawnSync('apt-ftparchive', ['-c', confPath, 'release', distsDir], {
-      encoding: 'utf8',
-      env: { ...process.env, LC_ALL: 'C' },
-    });
-    if (result.stdout) log(result.stdout);
-    if (result.stderr) log(result.stderr);
-    if (result.status !== 0) {
-      throw new Error(`apt-ftparchive release failed with code ${result.status}`);
-    }
+    const result = await run(
+      'apt-ftparchive',
+      ['-c', confPath, 'release', distsDir],
+      { env: { ...process.env, LC_ALL: 'C' } },
+      log,
+    );
     release = result.stdout;
   } finally {
     rmSync(confPath, { force: true });
@@ -188,8 +197,14 @@ export function rebuild(env: EnvRef, log: (line: string) => void): void {
   if (!fingerprint) {
     throw new Error('repo has no signing key');
   }
-  clearSign(env.repoId, fingerprint, join(distsDir, 'Release'), join(distsDir, 'InRelease'), log);
-  detachSign(
+  await clearSign(
+    env.repoId,
+    fingerprint,
+    join(distsDir, 'Release'),
+    join(distsDir, 'InRelease'),
+    log,
+  );
+  await detachSign(
     env.repoId,
     fingerprint,
     join(distsDir, 'Release'),
@@ -207,16 +222,15 @@ export function serveHeaders(path: string): Record<string, string> {
 }
 
 export function setupSnippet(
-  repoId: string,
   repoName: string,
   baseUrl: string,
   envName: string,
   _fingerprint: string,
 ): string {
-  return `curl -fsSL ${baseUrl}/api/v1/repos/${repoId}/${envName}/gpg-public-key \\
+  return `curl -fsSL ${baseUrl}/api/v1/repos/${repoName}/${envName}/gpg-public-key \\
   | sudo gpg --dearmor -o /usr/share/keyrings/${repoName}.gpg
 
-echo "deb [signed-by=/usr/share/keyrings/${repoName}.gpg] ${baseUrl}/r/${repoId}/${envName}/deb ${envName} main" \\
+echo "deb [signed-by=/usr/share/keyrings/${repoName}.gpg] ${baseUrl}/r/${repoName}/${envName}/deb ${envName} main" \\
   | sudo tee /etc/apt/sources.list.d/${repoName}.list
 sudo apt-get update
 

@@ -6,6 +6,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import * as schema from '../db/schema.js';
 import { config } from '../config.js';
+import { run } from '../lib/exec.js';
 import { nowSeconds } from '../lib/time.js';
 
 export function gpgHome(repoId: string): string {
@@ -29,48 +30,48 @@ function signEnv(repoId: string): NodeJS.ProcessEnv {
   return { ...process.env, LC_ALL: 'C', GNUPGHOME: gpgHome(repoId) };
 }
 
-function runSign(
+async function runSign(
   repoId: string,
   fingerprint: string,
   args: string[],
   input: string,
   output: string,
   log: (line: string) => void,
-): void {
-  const sign = spawnSync(
-    'gpg',
-    [
-      '--batch',
-      '--pinentry-mode',
-      'loopback',
-      '--passphrase',
-      '',
-      '--default-key',
-      fingerprint,
-      '--yes',
-      ...args,
-      '-o',
-      output,
-      input,
-    ],
-    { encoding: 'utf8', env: signEnv(repoId) },
-  );
-  if (sign.stdout) log(sign.stdout);
-  if (sign.stderr) log(sign.stderr);
-  if (sign.status !== 0) {
-    throw new Error(`gpg signing failed for ${input}: ${sign.stderr || sign.status}`);
+): Promise<void> {
+  try {
+    await run(
+      'gpg',
+      [
+        '--batch',
+        '--pinentry-mode',
+        'loopback',
+        '--passphrase',
+        '',
+        '--default-key',
+        fingerprint,
+        '--yes',
+        ...args,
+        '-o',
+        output,
+        input,
+      ],
+      { env: signEnv(repoId) },
+      log,
+    );
+  } catch (err) {
+    throw new Error(`gpg signing failed for ${input}: ${String(err)}`);
   }
 }
 
-export function detachSign(
+export async function detachSign(
   repoId: string,
   fingerprint: string,
   input: string,
   output: string,
   log: (line: string) => void,
   armored = false,
-): void {
-  runSign(
+): Promise<void> {
+  await runSign(
     repoId,
     fingerprint,
     armored ? ['--armor', '--detach-sign'] : ['--detach-sign'],
@@ -80,14 +81,14 @@ export function detachSign(
   );
 }
 
-export function clearSign(
+export async function clearSign(
   repoId: string,
   fingerprint: string,
   input: string,
   output: string,
   log: (line: string) => void,
-): void {
-  runSign(repoId, fingerprint, ['--clearsign'], input, output, log);
+): Promise<void> {
+  await runSign(repoId, fingerprint, ['--clearsign'], input, output, log);
 }
 
 export function repoFingerprint(repoId: string): string | undefined {

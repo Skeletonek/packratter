@@ -1,7 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { page } from '$app/state';
+  import { authHeaders, handleApiError } from '$lib/api.js';
   import { showError } from '$lib/errorStore.js';
+  import { formatBytes } from '$lib/format.js';
+  import JobsPanel from '$lib/JobsPanel.svelte';
+  import PromotePanel from '$lib/PromotePanel.svelte';
 
   interface Package {
     filename: string;
@@ -12,54 +16,61 @@
     createdAt: number;
   }
 
-  interface Job {
-    id: string;
-    status: string;
-    log: string;
-  }
+  const repoName = page.params.repo;
 
-  const repoId = page.params.repo;
-
-  let repoName = '';
   let repoType = 'pacman';
-  let envId = '';
+  let envs: { id: string; name: string }[] = [];
+  let activeEnv = 'stable';
   let packages: Package[] = [];
-  let jobs: Job[] = [];
   let file: FileList | null = null;
   let uploading = false;
   let message = '';
   let snippet = '';
   let snippetCopied = false;
   let activeTab = 'upload';
-
-  function handleApiError(prefix: string, json: { error?: { code?: string; message?: string } }) {
-    showError(json.error?.code ?? prefix, json.error?.message ?? 'Unexpected server response');
-  }
-
-  function formatBytes(n: number): string {
-    if (n === 0) return '0 B';
-    const units = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log10(n) / 3);
-    const value = n / Math.pow(1000, i);
-    return `${value.toFixed(1)} ${units[i]}`;
-  }
+  let showNewEnv = false;
+  let newEnvName = '';
 
   async function load() {
     const [repoRes, pkgRes, snippetRes] = await Promise.all([
-      fetch(`/api/v1/repos/${repoId}`),
-      fetch(`/api/v1/repos/${repoId}/stable/packages`),
-      fetch(`/api/v1/repos/${repoId}/stable/setup-snippet`),
+      fetch(`/api/v1/repos/${repoName}`),
+      fetch(`/api/v1/repos/${repoName}/${activeEnv}/packages`),
+      fetch(`/api/v1/repos/${repoName}/${activeEnv}/setup-snippet`),
     ]);
     const repoJson = await repoRes.json();
     const pkgJson = await pkgRes.json();
     const snippetJson = await snippetRes.json();
     if (!repoJson.success) throw new Error(repoJson.error?.message ?? 'repo load failed');
     if (!pkgJson.success) throw new Error(pkgJson.error?.message ?? 'package load failed');
-    repoName = repoJson.data.name;
     repoType = repoJson.data.type;
-    envId = repoJson.data.envs[0]?.id ?? '';
+    envs = repoJson.data.envs;
     packages = pkgJson.data;
     snippet = snippetJson.success ? snippetJson.data : '';
+  }
+
+  function switchEnv(name: string) {
+    activeEnv = name;
+    message = '';
+    load().catch((e) => showError('LOAD_FAILED', String(e)));
+  }
+
+  async function createEnv() {
+    const name = newEnvName.trim();
+    if (!name) return;
+    const res = await fetch(`/api/v1/repos/${repoName}/envs`, {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    const json = await res.json();
+    if (!json.success) {
+      handleApiError('CREATE_ENV_FAILED', json);
+      return;
+    }
+    showNewEnv = false;
+    newEnvName = '';
+    activeEnv = name;
+    await load();
   }
 
   async function upload() {
@@ -67,9 +78,9 @@
     uploading = true;
     message = '';
     try {
-      const res = await fetch(`/api/v1/repos/${repoId}/stable/packages`, {
+      const res = await fetch(`/api/v1/repos/${repoName}/${activeEnv}/packages`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/octet-stream' },
+        headers: { ...authHeaders(), 'Content-Type': 'application/octet-stream' },
         body: file[0],
       });
       const json = await res.json();
@@ -79,7 +90,6 @@
       }
       message = `Uploaded ${json.data.filename}; job ${json.data.jobId}`;
       activeTab = 'jobs';
-      pollJob(json.data.jobId);
       await load();
     } catch (e) {
       showError('UPLOAD_FAILED', String(e));
@@ -89,31 +99,19 @@
     }
   }
 
-  async function pollJob(jobId: string) {
-    for (let i = 0; i < 30; i++) {
-      await new Promise((r) => setTimeout(r, 1000));
-      const res = await fetch(`/api/v1/jobs/${jobId}`);
-      const json = await res.json();
-      if (!json.success) continue;
-      jobs = [...jobs.filter((j) => j.id !== jobId), json.data];
-      if (json.data.status === 'error') {
-        showError('REBUILD_ERROR', json.data.log || 'rebuild failed');
-        break;
-      }
-      if (json.data.status === 'done') break;
-    }
-  }
-
   async function deletePkg(filename: string) {
-    const res = await fetch(`/api/v1/repos/${repoId}/stable/packages/${encodeURIComponent(filename)}`, {
-      method: 'DELETE',
-    });
+    const res = await fetch(
+      `/api/v1/repos/${repoName}/${activeEnv}/packages/${encodeURIComponent(filename)}`,
+      {
+        method: 'DELETE',
+        headers: authHeaders(),
+      },
+    );
     const json = await res.json();
     if (!json.success) {
       handleApiError('DELETE_FAILED', json);
       return;
     }
-    pollJob(json.data.jobId);
     await load();
   }
 
@@ -133,12 +131,45 @@
 </script>
 
 <div class="container">
-  <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
-    <h1 class="mb-0">{repoName || 'Repository'}</h1>
-    {#if envId}
-      <span class="badge text-bg-secondary font-monospace text-truncate" style="max-width: 16rem;" title={envId}>{envId}</span>
-    {/if}
+  <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
+    <h1 class="mb-0">{repoName}</h1>
   </div>
+
+  <ul class="nav nav-pills mb-3 align-items-center">
+    {#each envs as env}
+      <li class="nav-item">
+        <button
+          class="nav-link"
+          class:active={env.name === activeEnv}
+          on:click={() => switchEnv(env.name)}
+        >
+          {env.name}
+        </button>
+      </li>
+    {/each}
+    {#if showNewEnv}
+      <li class="nav-item ms-2">
+        <form class="d-flex gap-1" on:submit|preventDefault={createEnv}>
+          <input
+            class="form-control form-control-sm"
+            style="width: 9rem;"
+            placeholder="env name"
+            bind:value={newEnvName}
+          />
+          <button class="btn btn-sm btn-primary" type="submit">Add</button>
+          <button class="btn btn-sm btn-outline-secondary" type="button" on:click={() => (showNewEnv = false)}>
+            Cancel
+          </button>
+        </form>
+      </li>
+    {:else}
+      <li class="nav-item ms-2">
+        <button class="btn btn-sm btn-outline-secondary" on:click={() => (showNewEnv = true)}>
+          <i class="bi bi-plus-lg"></i> New env
+        </button>
+      </li>
+    {/if}
+  </ul>
 
   <ul class="nav nav-tabs mb-3">
     <li class="nav-item">
@@ -150,9 +181,10 @@
       </button>
     </li>
     <li class="nav-item">
-      <button class="nav-link" class:active={activeTab === 'jobs'} on:click={() => (activeTab = 'jobs')}>
-        Jobs {#if jobs.length}<span class="badge text-bg-secondary ms-1">{jobs.length}</span>{/if}
-      </button>
+      <button class="nav-link" class:active={activeTab === 'promote'} on:click={() => (activeTab = 'promote')}>Promote</button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link" class:active={activeTab === 'jobs'} on:click={() => (activeTab = 'jobs')}>Jobs</button>
     </li>
     <li class="nav-item">
       <button class="nav-link" class:active={activeTab === 'setup'} on:click={() => (activeTab = 'setup')}>Setup</button>
@@ -222,7 +254,7 @@
   {#if activeTab === 'packages'}
     <div class="card shadow-sm">
       <div class="card-body">
-        <h5 class="card-title">Packages</h5>
+        <h5 class="card-title">Packages in {activeEnv}</h5>
         {#if packages.length > 0}
           <div class="table-responsive">
             <table class="table table-striped table-hover align-middle">
@@ -263,39 +295,14 @@
     </div>
   {/if}
 
+  {#if activeTab === 'promote'}
+    {#key activeEnv}
+      <PromotePanel {repoName} {envs} sourceEnv={activeEnv} />
+    {/key}
+  {/if}
+
   {#if activeTab === 'jobs'}
-    <div class="card shadow-sm">
-      <div class="card-body">
-        <h5 class="card-title">Jobs</h5>
-        {#if jobs.length > 0}
-          <div class="list-group">
-            {#each jobs.slice().reverse() as job}
-              <div class="list-group-item">
-                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
-                  <code class="small text-truncate" style="max-width: 16rem;">{job.id}</code>
-                  <span
-                    class="badge"
-                    class:text-bg-success={job.status === 'done'}
-                    class:text-bg-danger={job.status === 'error'}
-                    class:text-bg-warning={job.status !== 'done' && job.status !== 'error'}
-                  >
-                    {job.status}
-                  </span>
-                </div>
-                {#if job.log}
-                  <details class="mt-2">
-                    <summary class="small user-select-none">Show log</summary>
-                    <pre class="mt-2 p-2 rounded bg-body-tertiary border small mb-0"><code>{job.log}</code></pre>
-                  </details>
-                {/if}
-              </div>
-            {/each}
-          </div>
-        {:else}
-          <p class="text-body-secondary mb-0">No jobs yet.</p>
-        {/if}
-      </div>
-    </div>
+    <JobsPanel {repoName} />
   {/if}
 
   {#if activeTab === 'setup'}

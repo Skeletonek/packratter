@@ -23,7 +23,7 @@ const fixturePath = fileURLToPath(
 
 let token = '';
 let server: FastifyInstance;
-let repoId = '';
+let repoName = '';
 
 function auth(): Record<string, string> {
   return { authorization: `Bearer ${token}` };
@@ -66,12 +66,12 @@ describe('rpm format', () => {
   });
 
   it('produces a setup snippet with a .repo file and repo_gpgcheck', () => {
-    const snippet = rpm.setupSnippet('rid', 'myrepo', 'http://localhost:5000', 'stable', 'fpr');
+    const snippet = rpm.setupSnippet('myrepo', 'http://localhost:5000', 'stable', 'fpr');
     expect(snippet).toContain('/etc/yum.repos.d/myrepo.repo');
-    expect(snippet).toContain('baseurl=http://localhost:5000/r/rid/stable/rpm');
+    expect(snippet).toContain('baseurl=http://localhost:5000/r/myrepo/stable/rpm');
     expect(snippet).toContain('repo_gpgcheck=1');
     expect(snippet).toContain(
-      'gpgkey=http://localhost:5000/api/v1/repos/rid/stable/gpg-public-key',
+      'gpgkey=http://localhost:5000/api/v1/repos/myrepo/stable/gpg-public-key',
     );
     expect(snippet).toContain('dnf install');
   });
@@ -103,13 +103,13 @@ describe.skipIf(
     expect(json.success).toBe(true);
     expect(json.data.type).toBe('rpm');
     expect(json.data.envs).toEqual([expect.objectContaining({ name: 'stable' })]);
-    repoId = json.data.id;
+    repoName = json.data.name;
   });
 
   it('rejects an invalid package with VALIDATION_ERROR', async () => {
     const res = await server.inject({
       method: 'PUT',
-      url: `/api/v1/repos/${repoId}/stable/packages`,
+      url: `/api/v1/repos/${repoName}/stable/packages`,
       headers: { ...auth(), 'Content-Type': 'application/octet-stream' },
       payload: Buffer.from('not an rpm package'),
     });
@@ -121,7 +121,7 @@ describe.skipIf(
   it('uploads a real package, rebuilds, and serves repodata/package files', async () => {
     const uploadRes = await server.inject({
       method: 'PUT',
-      url: `/api/v1/repos/${repoId}/stable/packages`,
+      url: `/api/v1/repos/${repoName}/stable/packages`,
       headers: { ...auth(), 'Content-Type': 'application/octet-stream' },
       payload: readFileSync(fixturePath),
     });
@@ -146,20 +146,20 @@ describe.skipIf(
 
     const repomd = await server.inject({
       method: 'GET',
-      url: `/r/${repoId}/stable/rpm/repodata/repomd.xml`,
+      url: `/r/${repoName}/stable/rpm/repodata/repomd.xml`,
     });
     expect(repomd.statusCode).toBe(200);
 
     const repomdSig = await server.inject({
       method: 'GET',
-      url: `/r/${repoId}/stable/rpm/repodata/repomd.xml.asc`,
+      url: `/r/${repoName}/stable/rpm/repodata/repomd.xml.asc`,
     });
     expect(repomdSig.statusCode).toBe(200);
     expect(repomdSig.body).toContain('-----BEGIN PGP SIGNATURE-----');
 
     const pkgRes = await server.inject({
       method: 'GET',
-      url: `/r/${repoId}/stable/rpm/packages/guinea-mpeg-0.12.0-1.noarch.rpm`,
+      url: `/r/${repoName}/stable/rpm/packages/guinea-mpeg-0.12.0-1.noarch.rpm`,
     });
     expect(pkgRes.statusCode).toBe(200);
   });

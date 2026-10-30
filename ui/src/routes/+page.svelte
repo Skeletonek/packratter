@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { resolve } from '$app/paths';
   import { goto } from '$app/navigation';
+  import { authHeaders, handleApiError } from '$lib/api.js';
   import { showError } from '$lib/errorStore.js';
 
   interface Repo {
@@ -23,14 +24,10 @@
     repos = json.data;
   }
 
-  function handleApiError(prefix: string, json: { error?: { code?: string; message?: string } }) {
-    showError(json.error?.code ?? prefix, json.error?.message ?? 'Unexpected server response');
-  }
-
   async function createRepo() {
     const res = await fetch('/api/v1/repos', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, type }),
     });
     const json = await res.json();
@@ -41,7 +38,7 @@
     name = '';
     type = 'pacman';
     await load();
-    await goto(resolve(`/repos/${json.data.id}`));
+    await goto(resolve(`/repos/${json.data.name}`));
   }
 
   onMount(() => {
@@ -64,7 +61,7 @@
     <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-3 mb-4">
       {#each repos as repo}
         <div class="col">
-          <a href={resolve(`/repos/${repo.id}`)} class="card text-decoration-none h-100 shadow-sm">
+          <a href={resolve(`/repos/${repo.name}`)} class="card text-decoration-none h-100 shadow-sm">
             <div class="card-body">
               <h5 class="card-title">{repo.name}</h5>
               <p class="card-text text-body-secondary">{repo.type}</p>

@@ -34,4 +34,4 @@ If no users exist, the service creates the `ADMIN_USER` account from the environ
 
 ## Stages
 
-See `STAGES.md`. Current progress: **S3 complete** (deb + rpm import and serve, verified with real `apt-get` and `dnf` clients in containers).
+See `STAGES.md`. Current progress: **S4 complete** (deb + rpm import and serve verified with real `apt-get`/`dnf` clients; multiple envs with promote and a jobs UI).

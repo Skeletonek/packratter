@@ -1,16 +1,16 @@
 import Fastify, { type FastifyError, type FastifyReply, type FastifyRequest } from 'fastify';
 import fastifyStatic from '@fastify/static';
+import { ZodError } from 'zod';
 import { existsSync, mkdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { eq, and } from 'drizzle-orm';
 import { config } from './config.js';
 import { AppError } from './errors.js';
-import authPlugin from './api/plugins/auth.js';
+import { registerAuth } from './api/plugins/auth.js';
 import reposRoutes from './api/routes/repos.js';
 import packagesRoutes from './api/routes/packages.js';
+import envsRoutes from './api/routes/envs.js';
 import jobsRoutes from './api/routes/jobs.js';
-import { db } from './db/index.js';
-import * as schema from './db/schema.js';
+import { resolveEnv, resolveRepo } from './lib/repos.js';
 import { formats, type RepoType } from './formats/index.js';
 
 const uiRoot = join(import.meta.dirname, '../dist/ui');
@@ -27,6 +27,17 @@ export function buildServer() {
       reply.status(error.statusCode).send({
         success: false,
         error: { code: error.code, message: error.message },
+      });
+      return;
+    }
+
+    if (error instanceof ZodError) {
+      reply.status(400).send({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: error.issues.map((issue) => issue.message).join('; ') || 'invalid request',
+        },
       });
       return;
     }
@@ -70,10 +81,11 @@ export function buildServer() {
     timestamp: new Date().toISOString(),
   }));
 
-  void app.register(authPlugin);
+  registerAuth(app);
 
   void app.register(reposRoutes, { prefix: '/api/v1/repos' });
   void app.register(packagesRoutes, { prefix: '/api/v1/repos' });
+  void app.register(envsRoutes, { prefix: '/api/v1/repos' });
   void app.register(jobsRoutes, { prefix: '/api/v1/jobs' });
 
   const reposRoot = resolve(config.DATA_DIR, 'repos');
@@ -86,18 +98,12 @@ export function buildServer() {
 
   app.get('/r/:repo/:env/*', async (request: FastifyRequest, reply: FastifyReply) => {
     const { repo, env } = request.params as { repo: string; env: string };
-    const repoRow = db.select().from(schema.repos).where(eq(schema.repos.id, repo)).all()[0];
-    if (!repoRow) throw new AppError('NOT_FOUND', 'repo not found', 404);
-    const envRow = db
-      .select()
-      .from(schema.envs)
-      .where(and(eq(schema.envs.repoId, repo), eq(schema.envs.name, env)))
-      .all()[0];
-    if (!envRow) throw new AppError('NOT_FOUND', 'env not found', 404);
+    const repoRow = resolveRepo(repo);
+    const envRow = resolveEnv(repoRow.id, env);
 
     const pathname = new URL(request.url, 'http://localhost').pathname;
     const rel = decodeURIComponent(pathname.slice(`/r/${repo}/${env}/`.length));
-    const filePath = join(reposRoot, repo, envRow.id, rel);
+    const filePath = join(reposRoot, repoRow.id, envRow.id, rel);
     const resolved = resolve(filePath);
     if (!resolved.startsWith(reposRoot + '/') && resolved !== reposRoot) {
       throw new AppError('NOT_FOUND', 'invalid path', 404);
@@ -108,7 +114,7 @@ export function buildServer() {
       void reply.header(key, value);
     }
 
-    return reply.sendFile(join(repo, envRow.id, rel), reposRoot);
+    return reply.sendFile(join(repoRow.id, envRow.id, rel), reposRoot);
   });
 
   if (hasUi) {
