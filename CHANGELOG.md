@@ -2,10 +2,21 @@
 
 ## 0.6.1 — 2026-11-01
 
+### Changes
+
+- The production container now runs as a non-root user.
+- Backup and restore documentation added (`docs/backup.md`).
+
+### Security
+
+- An admin password reset now signs that user's sessions out everywhere.
+- New `TRUST_PROXY` setting keys rate limiting on real client IPs behind a reverse proxy.
+
 ### Fixes
 
 - Deleting a repository now returns to the repositories page with a confirmation banner.
 - Deleting or renaming an environment shows a confirmation banner.
+- The production image build no longer fails on unapproved dependency build scripts.
 
 ## 0.6.0 — 2026-11-01
 

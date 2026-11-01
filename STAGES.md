@@ -263,6 +263,28 @@ install from `/r/*` with no credentials.
   service accounts.
 - Also the point at which "who may publish to which repo" finally matters.
 
+### S8 — Ops & audit hardening (~1–2 days)
+
+Follow-up hardening beyond S5/S6's basics; unblocks treating Packratter as
+production infrastructure rather than a team tool. Half of the list below was noted
+during the S6 security review.
+
+- **Audit trail:** admin and destructive verbs (repo/env deletes, renames, user
+  changes, password resets) record actor, subject, timestamp; searchable table.
+- **Account recovery consistency:** own password change currently keeps other
+  sessions ("comfort"); consider a "sign out everywhere" button per user plus a
+  session list on the Account page.
+- **Signing key lifecycle:** recommend passphrase-protected GPG keys as the default
+  for exposed installs in docs; document rotation (new key, re-sign metadata,
+  client key transitions) and encrypted, access-restricted backups of `keys/`.
+- **API key expiry:** optional TTL and last-used tracking on tokens (scoping itself
+  is S7; this adds rotation/rotting).
+- **Production deployment checklist doc:** TLS termination, `TRUST_PROXY`, non-root
+  data permissions, backup schedule — as a single validated runbook.
+- **2FA/TOTP for admin accounts** — evaluate fit before building.
+- **Fresh-eyes security review** of the auth/session/serve paths — author confidence
+  is not an audit.
+
 **Total: ~14–21 days** — lower than `plan.md`'s 4–7 weeks because schema-first plus the
 format contract eliminate most of M1's rework.
 

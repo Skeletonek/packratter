@@ -35,6 +35,11 @@ cp .env.example .env
 docker compose up --build
 ```
 
+The container runs as an unprivileged user (uid/gid 1000) — the data directory must
+be writable by it (`chown -R 1000:1000 data` or equivalent). When placed behind a
+TLS-terminating reverse proxy, set `TRUST_PROXY=1` so rate limiting keys on real
+client IPs. For backups and restores see `docs/backup.md`.
+
 ### Development in Docker
 
 Install and build on the host, then the container runs the compiled server against the exact base the production image uses:

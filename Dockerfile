@@ -30,12 +30,19 @@ RUN dnf -y install createrepo_c dpkg-devel ostree flatpak gnupg2 zstd tar xz \
 RUN curl -fsSL https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz \
   | tar -xJ -C /usr/local --strip-components=1 --exclude='share/*'
 
+# The service runs unprivileged. uid/gid 1000 matches the usual first host
+# user, so bind-mounted data directories keep working without chowning.
+RUN useradd --uid 1000 --user-group --shell /sbin/nologin packratter
+
 WORKDIR /app
 COPY --from=builder /build/dist ./dist
 COPY --from=builder /build/node_modules ./node_modules
 COPY --from=builder /build/package.json ./package.json
+COPY --from=builder /build/docker-entrypoint.sh ./docker-entrypoint.sh
 
 VOLUME /data
 EXPOSE 8080
 ENV NODE_ENV=production
-CMD ["node", "/app/dist/index.js"]
+# Starts as root so the entrypoint can republish /data ownership, then drops
+# to the unprivileged packratter user for the server process itself.
+ENTRYPOINT ["sh", "/app/docker-entrypoint.sh"]

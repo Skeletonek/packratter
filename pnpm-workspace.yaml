@@ -6,6 +6,7 @@ verifyDepsBeforeRun: false
 allowBuilds:
   argon2: true
   esbuild: true
+  '@parcel/watcher': true
 minimumReleaseAgeExclude:
   - '@vitest/mocker@5.0.4'
   - '@vitest/spy@5.0.4'

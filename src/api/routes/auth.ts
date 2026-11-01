@@ -291,6 +291,10 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       .where(eq(schema.users.id, id))
       .run();
 
+    // A forced reset means the caller is taking over the account: existing
+    // devices must not survive it. (Own password changes intentionally do.)
+    db.delete(schema.sessions).where(eq(schema.sessions.userId, id)).run();
+
     // Same one-time contract as account creation and the bootstrap password.
     return { success: true, data: { id, login: target.login, password } };
   });

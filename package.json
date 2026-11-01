@@ -1,6 +1,7 @@
 {
   "name": "packratter",
   "version": "0.6.1",
+  "license": "BSD-3-Clause",
   "description": "Host-only package repository manager for deb, rpm, pacman and flatpak.",
   "private": true,
   "type": "module",

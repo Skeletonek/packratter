@@ -35,6 +35,9 @@ const configSchema = z.object({
   DISABLE_DEB: disabledFlag('DISABLE_DEB'),
   DISABLE_RPM: disabledFlag('DISABLE_RPM'),
   DISABLE_FLATPAK: disabledFlag('DISABLE_FLATPAK'),
+  /** Set '1' when behind a TLS-terminating reverse proxy so rate limiting
+   *  (and request IPs) use the real client address instead of the proxy's. */
+  TRUST_PROXY: disabledFlag('TRUST_PROXY'),
 });
 
 /** Strict on/off: only '1'/'true' count, so a stray "false" never enables. */

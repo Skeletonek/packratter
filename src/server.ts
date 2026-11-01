@@ -51,6 +51,7 @@ export function buildServer() {
   const app = Fastify({
     logger: { level: config.LOG_LEVEL },
     bodyLimit: config.MAX_UPLOAD_MB * 1024 * 1024,
+    trustProxy: config.TRUST_PROXY,
   });
 
   app.setErrorHandler((error, request, reply) => {

@@ -34,4 +34,4 @@ the web UI.
 
 ## Stages
 
-See `STAGES.md`. Current progress: **S6 complete** (local accounts & sessions: login/password, per-user API keys with admin user management, `/api/*` private behind sessions or bearer keys, `/r/*` public; SSO/OIDC is next as S7).
+See `STAGES.md`. Current progress: **S6 complete** (local accounts & sessions: login/password, per-user API keys with admin user management, `/api/*` private behind sessions or bearer keys, `/r/*` public; SSO/OIDC is next as S7, followed by S8 ops & audit hardening).

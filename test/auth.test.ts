@@ -406,5 +406,13 @@ describe('profile changes', () => {
     expect(relogin.status).toBe(200);
     const oldPass = await login('teammate2', 'teammatepass');
     expect(oldPass.status).toBe(401);
+
+    // the session from before the reset is gone
+    const stale = await server.inject({
+      method: 'GET',
+      url: '/api/v1/me',
+      headers: { cookie: asUser.cookie as string },
+    });
+    expect(stale.statusCode).toBe(401);
   });
 });
