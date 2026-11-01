@@ -1,8 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { page } from '$app/state';
+  import { goto } from '$app/navigation';
+  import { resolve } from '$app/paths';
   import { handleApiError } from '$lib/api.js';
   import { showError } from '$lib/errorStore.js';
+  import { showNotice } from '$lib/noticeStore.js';
   import { user } from '$lib/userStore.js';
   import { formatBytes } from '$lib/format.js';
   import JobsPanel from '$lib/JobsPanel.svelte';
@@ -68,6 +71,7 @@
       return;
     }
     if (oldName === activeEnv) activeEnv = next;
+    showNotice(`Environment renamed to "${next}".`);
     await load();
   }
 
@@ -82,6 +86,7 @@
       const remaining = envs.find((env) => env.name !== name);
       activeEnv = remaining?.name ?? activeEnv;
     }
+    showNotice(`Environment "${name}" deleted.`);
     await load();
   }
 
@@ -92,7 +97,8 @@
       handleApiError('DELETE_FAILED', await res.json());
       return;
     }
-    goto('/');
+    showNotice(`Repository "${repoName}" deleted.`);
+    goto(resolve('/'));
   }
 
   async function createEnv() {    const name = newEnvName.trim();

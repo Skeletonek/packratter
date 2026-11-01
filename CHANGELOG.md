@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.1 — 2026-11-01
+
+### Fixes
+
+- Deleting a repository now returns to the repositories page with a confirmation banner.
+- Deleting or renaming an environment shows a confirmation banner.
+
 ## 0.6.0 — 2026-11-01
 
 ### Changes
