@@ -1,10 +1,9 @@
 services:
   packratter:
-    build: .
-    image: packratter:latest
+    image: registry.gitlab.com/skeletonek/packratter:latest
     container_name: packratter
     ports:
-      - "5000:5000"
+      - '5000:5000'
     volumes:
       - ./data:/data
     env_file:

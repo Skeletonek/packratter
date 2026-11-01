@@ -32,12 +32,12 @@ curl http://localhost:5000/healthz
 Production installs use the prebuilt image with docker compose — see the
 [installation guide](docs/install.md); no repo clone or build needed.
 
-To run a locally built image instead:
+A checkout runs the same prebuilt image, with the repo's `.env` and `./data`:
 
 ```bash
 cp .env.example .env
 # edit ADMIN_USER; ADMIN_PASS is optional (auto-generated and printed once if unset)
-docker compose up --build
+docker compose up -d
 ```
 
 The container runs as an unprivileged user (uid/gid 1000) — the data directory must
