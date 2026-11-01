@@ -19,16 +19,13 @@ everything below is already installed and nothing else is needed.
 
 Independently of the ecosystem:
 
-- **Node.js 22+** is required to run Packratter itself.
+- **Node.js 22+** is required to run Packratter itself. 
 - **`gnupg2`** is required for every repo: a GPG key is generated per repo at
   creation time and used for all metadata signing.
 
 Note that `repo-add` is not a binary but a bash script that shells out to
 `bsdtar`, `gpg`, `gettext` and `sha256sum` — these come with the `pacman`
 packaging (`pacman-package-manager` + `makepkg` on Debian/Ubuntu).
-
-Flatpak repos additionally require the `ENABLE_FLATPAK=1` env var to create repos
-of type `flatpak`.
 
 ## Fedora
 

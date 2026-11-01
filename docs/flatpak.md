@@ -1,7 +1,5 @@
 # Flatpak repositories
 
-Flatpak support is opt-in. Start the server with `ENABLE_FLATPAK=1`.
-
 ## Create a repo
 
 ```bash

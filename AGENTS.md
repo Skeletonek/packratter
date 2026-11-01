@@ -29,10 +29,6 @@ If no users exist, the service creates the `ADMIN_USER` account from the environ
 
 `CHANGELOG.md` uses only these sections: **Changes**, **Fixes**, **Security**, and **Updates** (reserved for dependency updates). Omit empty sections. Entries should be user-facing; avoid implementation details, stage labels, and internal architecture speak.
 
-## Temporary flags
-
-`ENABLE_FLATPAK` gates flatpak repo creation while the OSTree-over-HTTP path is proven in real use. Remove it once flatpak is stable.
-
 ## Stages
 
-See `STAGES.md`. Current progress: **S4 complete** (deb + rpm import and serve verified with real `apt-get`/`dnf` clients; multiple envs with promote and a jobs UI).
+See `STAGES.md`. Current progress: **S5 hardening complete** (upload limits, quotas, command timeouts, rate limiting, structured job errors, error pages, e2e client-install tests; `ENABLE_FLATPAK` flag removed).

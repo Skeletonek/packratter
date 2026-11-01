@@ -30,7 +30,7 @@ Returns service health.
 
 ### `POST /api/v1/repos`
 
-Create a repository. `type` can be `pacman`, `deb`, `rpm`, or `flatpak` (the latter requires `ENABLE_FLATPAK=1`).
+Create a repository. `type` can be `pacman`, `deb`, `rpm`, or `flatpak`.
 
 Request:
 
