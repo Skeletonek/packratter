@@ -1,6 +1,16 @@
-import { mkdirSync, mkdtempSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+
+// Full tests drive real package managers (pacman, apt, dnf, flatpak), so they
+// must only ever run inside the toolchain container — never on a host.
+const inContainer = existsSync('/.dockerenv') || existsSync('/run/.containerenv');
+if (process.env.RUN_FULL_TESTS === '1' && !inContainer) {
+  throw new Error(
+    'RUN_FULL_TESTS drives real package managers and must run in the toolchain container: ' +
+      'docker compose -f docker-compose.test.yml run --rm packratter-tests',
+  );
+}
 
 process.env.NODE_ENV = 'test';
 process.env.ADMIN_USER = 'admin';

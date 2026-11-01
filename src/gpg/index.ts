@@ -6,7 +6,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import * as schema from '../db/schema.js';
 import { config } from '../config.js';
-import { run } from '../lib/exec.js';
+import { run, CommandError } from '../lib/exec.js';
 import { nowSeconds } from '../lib/time.js';
 
 export function gpgHome(repoId: string): string {
@@ -59,7 +59,11 @@ async function runSign(
       log,
     );
   } catch (err) {
-    throw new Error(`gpg signing failed for ${input}: ${String(err)}`);
+    const message = err instanceof Error ? err.message : String(err);
+    throw new CommandError(
+      `gpg signing failed for ${input}: ${message}`,
+      err instanceof CommandError ? err.code : 'COMMAND_FAILED',
+    );
   }
 }
 

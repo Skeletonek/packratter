@@ -1,9 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { beforeAll, describe, expect, it } from 'vitest';
@@ -14,12 +13,7 @@ import { applyMigrations, db } from '../src/db/index.js';
 import * as schema from '../src/db/schema.js';
 import { buildServer } from '../src/server.js';
 import * as rpm from '../src/formats/rpm.js';
-
-// Prebuilt fixture: rpmbuild is not part of the runtime image, so we commit a
-// tiny noarch package instead of building one at test time.
-const fixturePath = fileURLToPath(
-  new URL('./fixtures/guinea-mpeg-0.12.0-1.noarch.rpm', import.meta.url),
-);
+import { buildRpmPackage } from './helpers.js';
 
 let token = '';
 let server: FastifyInstance;
@@ -88,7 +82,10 @@ describe('rpm format', () => {
 });
 
 describe.skipIf(
-  process.env.RUN_FULL_TESTS !== '1' || !commandExists('rpm') || !commandExists('createrepo_c'),
+  process.env.RUN_FULL_TESTS !== '1' ||
+    !commandExists('rpm') ||
+    !commandExists('rpmbuild') ||
+    !commandExists('createrepo_c'),
 )('Rpm repos', () => {
   it('creates an rpm repo with the implicit stable env', async () => {
     const res = await server.inject({
@@ -123,7 +120,7 @@ describe.skipIf(
       method: 'PUT',
       url: `/api/v1/repos/${repoName}/stable/packages`,
       headers: { ...auth(), 'Content-Type': 'application/octet-stream' },
-      payload: readFileSync(fixturePath),
+      payload: buildRpmPackage(),
     });
 
     expect(uploadRes.statusCode).toBe(202);
@@ -159,7 +156,7 @@ describe.skipIf(
 
     const pkgRes = await server.inject({
       method: 'GET',
-      url: `/r/${repoName}/stable/rpm/packages/guinea-mpeg-0.12.0-1.noarch.rpm`,
+      url: `/r/${repoName}/stable/rpm/packages/package-test-0.12.0-1.noarch.rpm`,
     });
     expect(pkgRes.statusCode).toBe(200);
   });

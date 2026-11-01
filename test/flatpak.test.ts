@@ -1,6 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { beforeAll, describe, expect, it } from 'vitest';
@@ -10,15 +8,7 @@ import { generateToken } from '../src/auth/tokens.js';
 import { applyMigrations, db } from '../src/db/index.js';
 import * as schema from '../src/db/schema.js';
 import { buildServer } from '../src/server.js';
-import { waitForJob } from './helpers.js';
-
-// Prebuilt fixture: flatpak build-init requires the org.freedesktop.Platform
-// runtime to be installed, which neither the host nor the toolchain container
-// should have to provide. Packratter only imports and serves bundles, so the
-// bundle contents are irrelevant.
-const fixturePath = fileURLToPath(
-  new URL('./fixtures/org.test.App-master.flatpak', import.meta.url),
-);
+import { buildFlatpakBundle, waitForJob } from './helpers.js';
 
 let token = '';
 let server: FastifyInstance;
@@ -94,7 +84,7 @@ describe.skipIf(process.env.RUN_FULL_TESTS !== '1')('Flatpak repos', () => {
   });
 
   it('imports a bundle, rebuilds, and serves summary/signature files', async () => {
-    const bundle = readFileSync(fixturePath);
+    const bundle = buildFlatpakBundle();
 
     const uploadRes = await server.inject({
       method: 'PUT',

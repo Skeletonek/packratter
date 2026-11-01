@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.5.0 — 2026-11-01
+
+### Changes
+
+- Uploads are now capped by `MAX_UPLOAD_MB` per file and `REPO_QUOTA_MB` per repository.
+- Metadata rebuild commands are now killed after `COMMAND_TIMEOUT_S` instead of hanging a job forever.
+- Failed jobs now show a structured error code and message in the jobs list.
+- Browsers now receive styled HTML error pages instead of raw JSON.
+- Flatpak support is no longer gated behind `ENABLE_FLATPAK`.
+
+### Security
+
+- Updated Node.js to 24.22.2, addressing the Node2Shell vulnerability (CVE-2026-111497).
+- Write API requests are now rate limited (`RATE_LIMIT_MAX` per `RATE_LIMIT_WINDOW_S`).
+
+### Fixes
+
+- Pacman packages now keep their original `name-ver-rel-arch` filenames after upload.
+
 ## 0.4.0 — 2026-10-30
 
 ### Changes

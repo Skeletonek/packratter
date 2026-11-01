@@ -70,8 +70,12 @@ export function ingest(env: EnvRef, tmpPath: string, bytes: Buffer): PackageMeta
     throw new Error('missing required .PKGINFO fields');
   }
 
+  // .PKGINFO carries the combined pkgver-pkgrel (e.g. "2.4.0-1"); fold in a
+  // legacy separate pkgrel when present so the filename stays name-ver-rel-arch.
+  const version = pkgrel && !pkgver.endsWith(`-${pkgrel}`) ? `${pkgver}-${pkgrel}` : pkgver;
+
   const ext = detectExtension(bytes);
-  const filename = `${pkgname}-${pkgver}-${pkgrel ?? '1'}-${arch}${ext}`;
+  const filename = `${pkgname}-${version}-${arch}${ext}`;
   const dir = ensureRepoEnvDir(env.repoId, env.id);
   const dest = join(dir, filename);
 
@@ -80,7 +84,7 @@ export function ingest(env: EnvRef, tmpPath: string, bytes: Buffer): PackageMeta
 
   return {
     filename,
-    version: pkgver,
+    version,
     arch,
     ref: null,
     size: bytes.length,

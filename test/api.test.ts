@@ -1,8 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { beforeAll, describe, expect, it } from 'vitest';
@@ -12,6 +8,7 @@ import { generateToken } from '../src/auth/tokens.js';
 import { applyMigrations, db } from '../src/db/index.js';
 import * as schema from '../src/db/schema.js';
 import { buildServer } from '../src/server.js';
+import { buildPacmanPackage, pacmanFilename } from './helpers.js';
 
 let token = '';
 let server: FastifyInstance;
@@ -19,27 +16,6 @@ let repoName = '';
 
 function auth(): Record<string, string> {
   return { authorization: `Bearer ${token}` };
-}
-
-function buildTestPackage(): Buffer {
-  const base = mkdtempSync(join(tmpdir(), 'packrat-pkg-'));
-  const cwd = join(base, 'root');
-  mkdirSync(cwd, { recursive: true });
-  writeFileSync(
-    join(cwd, '.PKGINFO'),
-    'pkgname = guinea-mpeg\npkgver = 0.12.0-1\npkgrel = 1\narch = x86_64\n',
-  );
-  const pkgPath = join(base, 'guinea-mpeg-0.12.0-1-1-x86_64.pkg.tar.zst');
-  const result = spawnSync('bsdtar', ['-c', '--zstd', '-f', pkgPath, '.PKGINFO'], {
-    cwd,
-    encoding: 'utf8',
-  });
-  if (result.status !== 0 || result.error) {
-    throw new Error(`bsdtar failed: ${result.error?.message ?? result.stderr}`);
-  }
-  const bytes = readFileSync(pkgPath);
-  rmSync(base, { recursive: true, force: true });
-  return bytes;
 }
 
 beforeAll(async () => {
@@ -146,7 +122,7 @@ describe.skipIf(process.env.RUN_FULL_TESTS !== '1')('API used by the repo pages'
   });
 
   it('uploads a real package, rebuilds, and serves db/package/signature files', async () => {
-    const pkgBytes = buildTestPackage();
+    const pkgBytes = buildPacmanPackage('package-test', '0.12.0');
     const uploadRes = await server.inject({
       method: 'PUT',
       url: `/api/v1/repos/${repoName}/stable/packages`,
@@ -188,13 +164,13 @@ describe.skipIf(process.env.RUN_FULL_TESTS !== '1')('API used by the repo pages'
 
     const pkgRes = await server.inject({
       method: 'GET',
-      url: `/r/${repoName}/stable/guinea-mpeg-0.12.0-1-1-x86_64.pkg.tar.zst`,
+      url: `/r/${repoName}/stable/${pacmanFilename('package-test', '0.12.0')}`,
     });
     expect(pkgRes.statusCode).toBe(200);
 
     const pkgSigRes = await server.inject({
       method: 'GET',
-      url: `/r/${repoName}/stable/guinea-mpeg-0.12.0-1-1-x86_64.pkg.tar.zst.sig`,
+      url: `/r/${repoName}/stable/${pacmanFilename('package-test', '0.12.0')}.sig`,
     });
     expect(pkgSigRes.statusCode).toBe(200);
   });

@@ -24,9 +24,6 @@ const createRepoSchema = z.object({
 const reposRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post('/', async (request, reply) => {
     const body = createRepoSchema.parse(request.body);
-    if (body.type === 'flatpak' && !config.ENABLE_FLATPAK) {
-      throw new AppError('NOT_IMPLEMENTED', 'Flatpak support is disabled', 400);
-    }
     const id = randomUUID();
     const envId = randomUUID();
 

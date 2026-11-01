@@ -76,5 +76,7 @@ export const jobs = sqliteTable('jobs', {
   kind: text().notNull(),
   status: text().notNull(),
   log: text().notNull().default(''),
+  errorCode: text('error_code'),
+  errorMessage: text('error_message'),
   createdAt: integer('created_at').notNull(),
 });

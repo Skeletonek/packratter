@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-ARG NODE_VERSION=24.21.0
+ARG NODE_VERSION=24.22.2
 
 # Dev image: same base as production — Fedora 44 + Node from the official tarball
 # plus the full format toolchain. Application code is bind-mounted over /app, so
@@ -7,7 +7,7 @@ ARG NODE_VERSION=24.21.0
 FROM registry.fedoraproject.org/fedora:44
 ARG NODE_VERSION
 RUN dnf -y install createrepo_c dpkg-devel ostree flatpak gnupg2 zstd tar xz \
-      bsdtar pacman apt-utils curl findutils \
+      bsdtar pacman apt-utils curl findutils rpm-build \
  && dnf clean all
 
 RUN curl -fsSL https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz \

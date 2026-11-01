@@ -8,6 +8,8 @@
     id: string;
     status: string;
     log: string;
+    errorCode: string | null;
+    errorMessage: string | null;
     createdAt: number;
   }
 
@@ -78,6 +80,11 @@
                 {/if}
               </div>
             </div>
+            {#if job.errorMessage}
+              <div class="alert alert-danger py-1 px-2 mt-2 mb-0 small">
+                <code>{job.errorCode ?? 'ERROR'}</code> {job.errorMessage}
+              </div>
+            {/if}
             {#if job.log}
               <details class="mt-2">
                 <summary class="small user-select-none">Show log</summary>

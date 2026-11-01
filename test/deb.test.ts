@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { eq } from 'drizzle-orm';
@@ -13,7 +13,7 @@ import { applyMigrations, db } from '../src/db/index.js';
 import * as schema from '../src/db/schema.js';
 import { buildServer } from '../src/server.js';
 import * as deb from '../src/formats/deb.js';
-import { waitForJob } from './helpers.js';
+import { buildDebPackage, waitForJob } from './helpers.js';
 
 let token = '';
 let server: FastifyInstance;
@@ -25,27 +25,6 @@ function auth(): Record<string, string> {
 
 function commandExists(cmd: string): boolean {
   return !spawnSync(cmd, ['--version'], { encoding: 'utf8' }).error;
-}
-
-function buildTestDeb(): Buffer {
-  const base = mkdtempSync(join(tmpdir(), 'packrat-deb-'));
-  const pkgDir = join(base, 'pkg');
-  mkdirSync(join(pkgDir, 'DEBIAN'), { recursive: true });
-  writeFileSync(
-    join(pkgDir, 'DEBIAN', 'control'),
-    'Package: guinea-mpeg\nVersion: 0.12.0-1\nArchitecture: amd64\nMaintainer: Test <test@example.com>\nDescription: Tiny test package\n',
-  );
-  const debPath = join(base, 'guinea-mpeg_0.12.0-1_amd64.deb');
-  const result = spawnSync('dpkg-deb', ['--build', pkgDir, debPath], {
-    encoding: 'utf8',
-    env: { ...process.env, LC_ALL: 'C' },
-  });
-  if (result.status !== 0 || result.error) {
-    throw new Error(`dpkg-deb --build failed: ${result.error?.message ?? result.stderr}`);
-  }
-  const bytes = readFileSync(debPath);
-  rmSync(base, { recursive: true, force: true });
-  return bytes;
 }
 
 beforeAll(async () => {
@@ -140,7 +119,7 @@ describe.skipIf(
       method: 'PUT',
       url: `/api/v1/repos/${repoName}/stable/packages`,
       headers: { ...auth(), 'Content-Type': 'application/octet-stream' },
-      payload: buildTestDeb(),
+      payload: buildDebPackage(),
     });
 
     expect(uploadRes.statusCode).toBe(202);
@@ -179,11 +158,11 @@ describe.skipIf(
       url: `/r/${repoName}/stable/deb/dists/stable/main/binary-amd64/Packages`,
     });
     expect(packages.statusCode).toBe(200);
-    expect(packages.body).toContain('Filename: pool/amd64/guinea-mpeg_0.12.0-1_amd64.deb');
+    expect(packages.body).toContain('Filename: pool/amd64/package-test_0.12.0-1_amd64.deb');
 
     const pkgRes = await server.inject({
       method: 'GET',
-      url: `/r/${repoName}/stable/deb/pool/amd64/guinea-mpeg_0.12.0-1_amd64.deb`,
+      url: `/r/${repoName}/stable/deb/pool/amd64/package-test_0.12.0-1_amd64.deb`,
     });
     expect(pkgRes.statusCode).toBe(200);
   });
@@ -210,11 +189,11 @@ describe.skipIf(
 
     const stablePkg = await server.inject({
       method: 'GET',
-      url: `/r/${repoName}/stable/deb/pool/amd64/guinea-mpeg_0.12.0-1_amd64.deb`,
+      url: `/r/${repoName}/stable/deb/pool/amd64/package-test_0.12.0-1_amd64.deb`,
     });
     const testingPkg = await server.inject({
       method: 'GET',
-      url: `/r/${repoName}/testing/deb/pool/amd64/guinea-mpeg_0.12.0-1_amd64.deb`,
+      url: `/r/${repoName}/testing/deb/pool/amd64/package-test_0.12.0-1_amd64.deb`,
     });
     expect(stablePkg.statusCode).toBe(200);
     expect(testingPkg.statusCode).toBe(200);
@@ -225,6 +204,6 @@ describe.skipIf(
       url: `/r/${repoName}/testing/deb/dists/testing/main/binary-amd64/Packages`,
     });
     expect(index.statusCode).toBe(200);
-    expect(index.body).toContain('Filename: pool/amd64/guinea-mpeg_0.12.0-1_amd64.deb');
+    expect(index.body).toContain('Filename: pool/amd64/package-test_0.12.0-1_amd64.deb');
   });
 });

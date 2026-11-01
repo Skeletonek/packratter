@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-ARG NODE_VERSION=24.21.0
+ARG NODE_VERSION=24.22.2
 
 # --- builder ---------------------------------------------------------------
 FROM registry.fedoraproject.org/fedora:44 AS builder

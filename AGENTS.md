@@ -17,6 +17,7 @@ Project-specific guidance.
 - Use native tools for metadata generation; TS only reads headers for display.
 - Never log secrets or full API tokens. Token hashes are stored; plaintext tokens are shown exactly once at bootstrap.
 - Use `LC_ALL=C` when shelling out to native tools.
+- Full test suite (`RUN_FULL_TESTS=1`) drives real package managers and must only run in the toolchain container (`docker compose -f docker-compose.test.yml run --rm packratter-tests`); `test/setup.ts` enforces this. `pnpm test` is host-safe.
 - Use `crypto.randomUUID()` and `crypto.randomBytes()` for IDs/secrets; no `nanoid`.
 - Keep dependencies minimal.
 

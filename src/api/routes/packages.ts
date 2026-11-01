@@ -14,7 +14,25 @@ import { formats, type RepoType } from '../../formats/index.js';
 import type { PackageMeta } from '../../formats/types.js';
 import { enqueueRebuild } from '../../jobs/queue.js';
 
-const MAX_SIZE = 2 * 1024 * 1024 * 1024;
+const MAX_SIZE = config.MAX_UPLOAD_MB * 1024 * 1024;
+
+// Quota counts each distinct blob once per repo: promoted copies are
+// hardlinks and consume no extra disk.
+function repoUsageBytes(repoId: string): number {
+  const rows = db
+    .select()
+    .from(schema.packages)
+    .innerJoin(schema.envs, eq(schema.packages.envId, schema.envs.id))
+    .where(eq(schema.envs.repoId, repoId))
+    .all();
+  const blobs = new Map<string, number>();
+  for (const row of rows) {
+    blobs.set(row.packages.sha256 ?? row.packages.filename, row.packages.size ?? 0);
+  }
+  let total = 0;
+  for (const size of blobs.values()) total += size;
+  return total;
+}
 
 const uploadExtension: Record<RepoType, string> = {
   pacman: '.pkg.tar.zst',
@@ -37,15 +55,21 @@ const packagesRoutes: FastifyPluginAsync = async (fastify) => {
       const { repo, env } = request.params as { repo: string; env: string };
       const repoRow = resolveRepo(repo);
       const format = formats[repoRow.type as RepoType];
-      if (repoRow.type === 'flatpak' && !config.ENABLE_FLATPAK) {
-        throw new AppError('NOT_IMPLEMENTED', 'Flatpak support is disabled', 400);
-      }
 
       const envRow = resolveEnv(repoRow.id, env);
 
       const body = request.body as Buffer;
       if (!Buffer.isBuffer(body) || body.length === 0) {
         throw new AppError('BAD_REQUEST', 'empty or invalid body', 400);
+      }
+
+      const quotaBytes = config.REPO_QUOTA_MB * 1024 * 1024;
+      if (quotaBytes > 0 && repoUsageBytes(repoRow.id) + body.length > quotaBytes) {
+        throw new AppError(
+          'QUOTA_EXCEEDED',
+          `upload would exceed the ${config.REPO_QUOTA_MB} MiB quota for this repository`,
+          507,
+        );
       }
 
       const tmpDir = join(config.DATA_DIR, 'tmp');
@@ -121,9 +145,6 @@ const packagesRoutes: FastifyPluginAsync = async (fastify) => {
       throw new AppError('BAD_REQUEST', 'from and to must be different envs', 400);
     }
     const repoRow = resolveRepo(repo);
-    if (repoRow.type === 'flatpak' && !config.ENABLE_FLATPAK) {
-      throw new AppError('NOT_IMPLEMENTED', 'Flatpak support is disabled', 400);
-    }
     const fromEnv = resolveEnv(repoRow.id, body.from);
     const toEnv = resolveEnv(repoRow.id, body.to);
 

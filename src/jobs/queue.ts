@@ -4,6 +4,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import * as schema from '../db/schema.js';
 import { nowSeconds } from '../lib/time.js';
+import { CommandError } from '../lib/exec.js';
 import { formats, type RepoType } from '../formats/index.js';
 
 const queues = new Map<string, PQueue>();
@@ -53,8 +54,16 @@ export async function enqueueRebuild(repoId: string, envId: string): Promise<str
         .run();
       db.update(schema.jobs).set({ status: 'done' }).where(eq(schema.jobs.id, jobId)).run();
     } catch (err) {
-      log(String(err));
-      db.update(schema.jobs).set({ status: 'error' }).where(eq(schema.jobs.id, jobId)).run();
+      const message = err instanceof Error ? err.message : String(err);
+      log(message);
+      db.update(schema.jobs)
+        .set({
+          status: 'error',
+          errorCode: err instanceof CommandError ? err.code : 'INTERNAL_ERROR',
+          errorMessage: message,
+        })
+        .where(eq(schema.jobs.id, jobId))
+        .run();
     }
   });
 
