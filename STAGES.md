@@ -279,6 +279,12 @@ during the S6 security review.
   client key transitions) and encrypted, access-restricted backups of `keys/`.
 - **API key expiry:** optional TTL and last-used tracking on tokens (scoping itself
   is S7; this adds rotation/rotting).
+- **Release pipeline** _(shipped in 0.6.1)_: tag-driven CI publishes the container image
+  to the GitLab Container Registry and creates a GitLab Release with notes from
+  `CHANGELOG.md` (`.gitlab-ci.yml`, `scripts/release-notes.sh`); a tag without a
+  changelog section fails the pipeline.
+- **Install guide** _(shipped in 0.6.1)_: `docs/install.md` — compose-first install from
+  the prebuilt registry image, no repo clone needed.
 - **Production deployment checklist doc:** TLS termination, `TRUST_PROXY`, non-root
   data permissions, backup schedule — as a single validated runbook.
 - **2FA/TOTP for admin accounts** — evaluate fit before building.

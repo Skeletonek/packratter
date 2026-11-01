@@ -29,6 +29,11 @@ curl http://localhost:5000/healthz
 
 ### Docker / Podman
 
+Production installs use the prebuilt image with docker compose — see the
+[installation guide](docs/install.md); no repo clone or build needed.
+
+To run a locally built image instead:
+
 ```bash
 cp .env.example .env
 # edit ADMIN_USER; ADMIN_PASS is optional (auto-generated and printed once if unset)
@@ -71,6 +76,7 @@ Test dependencies live inside dedicated volumes and are installed automatically 
 
 ## Documentation
 
+- [Installation guide](docs/install.md)
 - [Pacman setup](docs/pacman.md)
 - [Deb setup](docs/deb.md)
 - [RPM setup](docs/rpm.md)
