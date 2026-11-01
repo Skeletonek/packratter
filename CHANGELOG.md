@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.1 — 2026-11-01
+
+### Fixes
+
+- Rebuilding the server no longer nests migration files when `dist/` already exists, which could leave new migrations unapplied on startup.
+
 ## 0.5.0 — 2026-11-01
 
 ### Changes
