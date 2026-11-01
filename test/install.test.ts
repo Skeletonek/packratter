@@ -76,7 +76,7 @@ async function fetchRetry(url: string, init?: RequestInit): Promise<Response> {
 async function waitForJobHttp(jobId: string): Promise<{ status: string; log: string }> {
   let job: { status: string; log: string } | null = null;
   for (let i = 0; i < 120; i++) {
-    const res = await fetchRetry(`${baseUrl}/api/v1/jobs/${jobId}`);
+    const res = await fetchRetry(`${baseUrl}/api/v1/jobs/${jobId}`, { headers: auth() });
     job = (await res.json()).data;
     if (job?.status === 'done' || job?.status === 'error') break;
     await new Promise((r) => setTimeout(r, 250));
@@ -106,7 +106,7 @@ async function upload(name: string, bytes: Buffer): Promise<void> {
 }
 
 async function fetchKey(name: string): Promise<string> {
-  const res = await fetchRetry(`${baseUrl}/api/v1/repos/${name}/stable/gpg-public-key`);
+  const res = await fetchRetry(`${baseUrl}/r/${name}/stable/gpg-public-key`);
   expect(res.status).toBe(200);
   return res.text();
 }
@@ -331,7 +331,7 @@ describe.skipIf(
           'enabled=1',
           'gpgcheck=0',
           'repo_gpgcheck=1',
-          `gpgkey=${baseUrl}/api/v1/repos/e2e-rpm/stable/gpg-public-key`,
+          `gpgkey=${baseUrl}/r/e2e-rpm/stable/gpg-public-key`,
           '',
         ].join('\n'),
       );

@@ -184,7 +184,7 @@ export function setupSnippet(
   fingerprint: string,
 ): string {
   return `keyfile=$(mktemp)
-curl -fsSL ${baseUrl}/api/v1/repos/${repoName}/${envName}/gpg-public-key -o "$keyfile"
+curl -fsSL ${baseUrl}/r/${repoName}/${envName}/gpg-public-key -o "$keyfile"
 sudo pacman-key --add "$keyfile"
 rm -f "$keyfile"
 sudo pacman-key --lsign-key ${fingerprint}

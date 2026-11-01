@@ -30,4 +30,6 @@ export interface Format {
   rebuild(env: EnvRef, log: (line: string) => void): Promise<void>;
   serveHeaders(path: string): Record<string, string>;
   setupSnippet(repoName: string, baseUrl: string, envName: string, fingerprint: string): string;
+  /** Only formats that store data under a name-dependent path implement this. */
+  renameEnv?(env: EnvRef, newName: string): void;
 }

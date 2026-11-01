@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { authHeaders, handleApiError } from '$lib/api.js';
+  import { handleApiError } from '$lib/api.js';
   import { showError } from '$lib/errorStore.js';
   import { formatBytes } from '$lib/format.js';
 
@@ -54,7 +54,7 @@
       const filenames = useSelection ? [...selected] : undefined;
       const res = await fetch(`/api/v1/repos/${repoName}/promote`, {
         method: 'POST',
-        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ from: sourceEnv, to: targetEnv, filenames }),
       });
       const json = await res.json();

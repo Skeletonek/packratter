@@ -53,9 +53,20 @@ export const repoKeys = sqliteTable(
 export const users = sqliteTable('users', {
   id: text().primaryKey(),
   login: text().notNull().unique(),
+  email: text(),
+  displayName: text('display_name'),
   passHash: text('pass_hash').notNull(),
   role: text().notNull(),
   createdAt: integer('created_at').notNull(),
+});
+
+export const sessions = sqliteTable('sessions', {
+  // sha256 of the cookie value, never the value itself
+  id: text().primaryKey(),
+  userId: text('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  expiresAt: integer('expires_at').notNull(),
 });
 
 export const tokens = sqliteTable('tokens', {

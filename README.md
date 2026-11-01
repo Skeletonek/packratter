@@ -16,12 +16,12 @@ The web UI lives at `/app` and is styled with Bootstrap 5, including light and d
 
 ```bash
 cp .env.example .env
-# edit ADMIN_USER and ADMIN_PASS
+# edit ADMIN_USER; ADMIN_PASS is optional (auto-generated and printed once if unset)
 pnpm install
 pnpm dev
 ```
 
-The bootstrap API token is printed once on first startup. Open the UI at `http://localhost:5000/app` or check health with:
+On first startup the admin account is created — if `ADMIN_PASS` is unset, a password is generated and printed once. Sign in with it in the web UI and add teammates in the Users page. Open the UI at `http://localhost:5000/app` or check health with:
 
 ```bash
 curl http://localhost:5000/healthz
@@ -31,7 +31,7 @@ curl http://localhost:5000/healthz
 
 ```bash
 cp .env.example .env
-# edit ADMIN_USER and ADMIN_PASS
+# edit ADMIN_USER; ADMIN_PASS is optional (auto-generated and printed once if unset)
 docker compose up --build
 ```
 

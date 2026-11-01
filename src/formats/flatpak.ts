@@ -209,7 +209,7 @@ export function setupSnippet(
   _fingerprint: string,
 ): string {
   return `keyfile=$(mktemp)
-curl -fsSL ${baseUrl}/api/v1/repos/${repoName}/${envName}/gpg-public-key -o "$keyfile"
+curl -fsSL ${baseUrl}/r/${repoName}/${envName}/gpg-public-key -o "$keyfile"
 flatpak remote-add --user --gpg-import="$keyfile" ${repoName} ${baseUrl}/r/${repoName}/${envName}/flatpak/ostree/
 rm -f "$keyfile"
 

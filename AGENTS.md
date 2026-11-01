@@ -23,7 +23,10 @@ Project-specific guidance.
 
 ## First-boot contract
 
-If no users exist, the service creates the `ADMIN_USER` account from the environment and prints a single bearer token. The token is stored as a hash and is never printed again.
+If no users exist, the service creates the `ADMIN_USER` account. The password comes
+from `ADMIN_PASS`; when unset, a strong password is generated and printed once on
+stdout (never again). There is no boot-time API token — keys are managed per user in
+the web UI.
 
 ## Changelog
 
@@ -31,4 +34,4 @@ If no users exist, the service creates the `ADMIN_USER` account from the environ
 
 ## Stages
 
-See `STAGES.md`. Current progress: **S5 hardening complete** (upload limits, quotas, command timeouts, rate limiting, structured job errors, error pages, e2e client-install tests; `ENABLE_FLATPAK` flag removed).
+See `STAGES.md`. Current progress: **S6 complete** (local accounts & sessions: login/password, per-user API keys with admin user management, `/api/*` private behind sessions or bearer keys, `/r/*` public; SSO/OIDC is next as S7).

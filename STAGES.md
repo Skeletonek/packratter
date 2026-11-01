@@ -7,7 +7,7 @@ Companion document: **`plan.md`** — the design record. All verified correction
 folded into it directly (see its §3, §4, §5, §8, §10, §12, §14, §15, §16).
 
 This file is the **build order**: which subset of `plan.md` gets built in which stage, and
-what has to be true before moving on. Where the two disagree on *why* something is the
+what has to be true before moving on. Where the two disagree on _why_ something is the
 way it is, `plan.md` carries the evidence inline.
 
 ---
@@ -16,20 +16,20 @@ way it is, `plan.md` carries the evidence inline.
 
 Carried from `plan.md` §1, plus what we settled while staging:
 
-| # | Decision |
-|---|---|
-| 1 | Host-only. No upstream mirroring / reposync / scheduled sync. |
-| 2 | Environments (`testing` -> `stable`) exist, but are **deferred to S4**. S1–S3 use a single implicit `stable` env. |
-| 3 | Local disk only. Low volume (MBs / few hundred packages). No S3 in v1. |
-| 4 | Flatpak bundles are built elsewhere. Service only imports + hosts. |
-| 5 | One DB: SQLite via built-in `node:sqlite`, WAL mode. |
-| 6 | TypeScript stack, SvelteKit 2 / Svelte 5. No React. |
-| 7 | Single Docker container. |
-| 8 | **Base image: Fedora 44 + Node 24.21.0 installed from the official tarball.** (Replaces `plan.md`'s Debian bookworm + Node 26.) |
-| 9 | **One GPG homedir per repo**: `/data/keys/gnupg/<repoId>/`, mode `700`. |
-| 10 | **GPG keys support both passphrase-protected and unprotected**, defaulting to unprotected. |
-| 11 | `/r/*` is publicly readable. Writes require a bearer token. |
-| 12 | Metadata generation always shells out to native tools. TS only reads headers for display. |
+| #   | Decision                                                                                                                        |
+| --- | ------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Host-only. No upstream mirroring / reposync / scheduled sync.                                                                   |
+| 2   | Environments (`testing` -> `stable`) exist, but are **deferred to S4**. S1–S3 use a single implicit `stable` env.               |
+| 3   | Local disk only. Low volume (MBs / few hundred packages). No S3 in v1.                                                          |
+| 4   | Flatpak bundles are built elsewhere. Service only imports + hosts.                                                              |
+| 5   | One DB: SQLite via built-in `node:sqlite`, WAL mode.                                                                            |
+| 6   | TypeScript stack, SvelteKit 2 / Svelte 5. No React.                                                                             |
+| 7   | Single Docker container.                                                                                                        |
+| 8   | **Base image: Fedora 44 + Node 24.21.0 installed from the official tarball.** (Replaces `plan.md`'s Debian bookworm + Node 26.) |
+| 9   | **One GPG homedir per repo**: `/data/keys/gnupg/<repoId>/`, mode `700`.                                                         |
+| 10  | **GPG keys support both passphrase-protected and unprotected**, defaulting to unprotected.                                      |
+| 11  | `/r/*` is publicly readable. The API requires authentication; state changes require a bearer token.                             |
+| 12  | Metadata generation always shells out to native tools. TS only reads headers for display.                                       |
 
 ---
 
@@ -81,10 +81,10 @@ So `bsdtar` is mandatory. Without it, valid packages are rejected with a mislead
 
 Package requirements per distro:
 
-| Distro | `repo-add` provider | makepkg helpers | `bsdtar` |
-|---|---|---|---|
-| Fedora | `pacman` (bundles makepkg + helpers) | included | `bsdtar` (separate pkg) |
-| Debian/Ubuntu | `pacman-package-manager` | `makepkg` (separate pkg) | `libarchive-tools` |
+| Distro        | `repo-add` provider                  | makepkg helpers          | `bsdtar`                |
+| ------------- | ------------------------------------ | ------------------------ | ----------------------- |
+| Fedora        | `pacman` (bundles makepkg + helpers) | included                 | `bsdtar` (separate pkg) |
+| Debian/Ubuntu | `pacman-package-manager`             | `makepkg` (separate pkg) | `libarchive-tools`      |
 
 ---
 
@@ -98,9 +98,9 @@ new code path — this is why adding deb/rpm/flatpak does not disturb working pa
 export interface Format {
   validate(filename: string, bytes: Buffer): Result<void, ValidationError>;
   ingest(env: Env, tmpPath: string): Promise<void>;
-  rebuild(env: Env, ctx: RebuildContext): Promise<void>;  // shells out + signs
+  rebuild(env: Env, ctx: RebuildContext): Promise<void>; // shells out + signs
   serveHeaders(path: string): { 'cache-control': string };
-  setupSnippet(repo: Repo, env: Env): string;             // pacman.conf / sources.list / repo file
+  setupSnippet(repo: Repo, env: Env): string; // pacman.conf / sources.list / repo file
 }
 ```
 
@@ -158,7 +158,7 @@ Nothing user-facing. Everything else drops into this shape.
 - Auth: bootstrap admin from env, one API token printed once at first boot
   (`prefix` + argon2 hash, never logged again).
 - **Create the full v1 schema now** — `repos, envs, packages, gpg_keys, repo_keys,
-  users, tokens, jobs`, including a default `stable` env per repo — so S4 needs zero
+users, tokens, jobs`, including a default `stable` env per repo — so S4 needs zero
   migrations.
 - Dockerfile (podman build verified), CI: typecheck + lint + test.
 
@@ -178,7 +178,7 @@ The goal stage. `docker run` → push a `.pkg.tar.zst` → it installs on a real
 - Job queue: in-process, concurrency 1 keyed on `(repo, env)`, stdout/stderr into
   `jobs.log`. `LC_ALL=C` is mandatory — otherwise logs come out localized.
 - `repo-add <name>.db.tar.gz --sign --key <fpr> <argv built from DB rows, never a
-  shell glob>`.
+shell glob>`.
 - Serve `/r/:repo/:env/*` with symlink following; `no-cache` on `*.db*` / `*.files*`
   / `*.sig`, `max-age=1y, immutable` on package files.
 - `GET .../gpg-public-key` + a copy-pasteable setup snippet.
@@ -230,10 +230,35 @@ contract honest.
 - e2e install tests for all four formats in clean client containers.
 - Error pages, structured job failure reporting.
 
-### S6 — SSO / OAuth + multi-user (open-ended)
+### S6 — Local accounts & sessions (~1.5–2 days)
 
-- OIDC (Authentik / Keycloak / Google) as an **additional** login method. Local users
-  keep working — this is additive, not a replacement.
+- Proper login/password for the UI — the pre-SSO half of multi-user. Supersedes part
+  of the S0 bootstrap decision: no API token printed at first boot anymore.
+- `POST /api/v1/auth/login` sets a httpOnly `SameSite=Lax` session cookie. Session
+  ids are random 256-bit secrets stored sha256-hashed (fast per-request lookup);
+  argon2 stays for passwords and API keys (low-entropy secrets).
+- Sessions auto-expire: `SESSION_TTL_MIN` (default `1440` = 24 h). A "remember this
+  device" checkbox extends both cookie and server session to `SESSION_REMEMBER_DAYS`
+  (default `7`).
+- `/api/*` requires authentication — reads included — except login; `/r/*`,
+  `/healthz` and the static UI shell stay public (locked decision #11 holds).
+- Per-user API keys: created/revoked in the UI, plaintext shown once, per-user issuer.
+  The shared printed key is gone.
+- `users.email` stored as a bare field, no verification.
+- Admin user management: create/list/update email+role/delete; guards against
+  self-delete and removing the last admin.
+- UI: login page, top-bar user menu (password change, sign out), account page (own
+  API keys, email, password), admin users page.
+- Bootstrap: `ADMIN_PASS` optional — when unset on first boot, a strong password is
+  generated and printed once on stdout.
+
+**Exit:** a fresh browser cannot read `/api/*` without signing in; packages still
+install from `/r/*` with no credentials.
+
+### S7 — SSO / OAuth + multi-user (open-ended)
+
+- OIDC (Authentik / Keycloak / Google) as an **additional** login method, building on
+  S6's local accounts. Local users keep working — this is additive, not a replacement.
 - This is where `users.role` earns its keep: per-user repo permissions, scoped tokens,
   service accounts.
 - Also the point at which "who may publish to which repo" finally matters.
@@ -248,8 +273,8 @@ format contract eliminate most of M1's rework.
 The full risk register is maintained in `plan.md` §15. Only one item is still open, and
 it gates exactly one stage:
 
-| Risk | Gates | Mitigation |
-|---|---|---|
+| Risk                                                      | Gates  | Mitigation                                                                                                        |
+| --------------------------------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------- |
 | `ostree` / `flatpak` in a container + HTTP serving quirks | **S2** | Behind `ENABLE_FLATPAK=1`, with a real `flatpak remote-add --gpg-import` client-verify test as the exit criterion |
 
 Everything else in `plan.md` §15 was resolved during toolchain verification and is marked
@@ -258,4 +283,3 @@ as such there.
 One proof obligation is carried into S1 rather than assumed: a real `pacman` **client**
 installing from the served repo. The db signature has been verified directly with `gpg`,
 which is only half of the S1 exit criterion.
-

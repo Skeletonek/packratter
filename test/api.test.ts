@@ -79,12 +79,12 @@ describe.skipIf(process.env.RUN_FULL_TESTS !== '1')('API used by the repo pages'
     expect(res.json().error?.code).toBe('NOT_FOUND');
   });
 
-  it('exposes the repo public key as armored text', async () => {
+  it('exposes the repo public key as armored text in the public /r/ zone', async () => {
     const res = await server.inject({
       method: 'GET',
-      url: `/api/v1/repos/${repoName}/stable/gpg-public-key`,
+      url: `/r/${repoName}/stable/gpg-public-key`,
     });
-
+    expect(res.headers['content-type']).toContain('text/plain');
     expect(res.statusCode).toBe(200);
     expect(res.body).toContain('-----BEGIN PGP PUBLIC KEY BLOCK-----');
   });

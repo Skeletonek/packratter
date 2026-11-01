@@ -1,16 +1,38 @@
 import { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
-import { eq, like, and } from 'drizzle-orm';
+import { eq, like, and, sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
+import { rmSync } from 'node:fs';
+import { join } from 'node:path';
 import { db } from '../../db/index.js';
 import * as schema from '../../db/schema.js';
 import { AppError } from '../../errors.js';
 import { nowSeconds } from '../../lib/time.js';
 import { resolveEnv, resolveRepo } from '../../lib/repos.js';
+import { assertTypeAvailable, scanToolchain } from '../../lib/toolchain.js';
 import { ensureRepoEnvDir } from '../../lib/paths.js';
-import { generateRepoKey, publicKey, repoFingerprint } from '../../gpg/index.js';
+import { generateRepoKey, repoFingerprint, gpgHome } from '../../gpg/index.js';
 import { formats, type RepoType } from '../../formats/index.js';
 import { config } from '../../config.js';
+import { requireAdmin } from './auth.js';
+
+/** Refuse destructive verbs while queued/running jobs may still write files. */
+export function guardNoRunningJobs(repoId: string, subject: string): void {
+  const busy = db
+    .select()
+    .from(schema.jobs)
+    .where(
+      and(eq(schema.jobs.repoId, repoId), sql`${schema.jobs.status} in ('pending', 'running')`),
+    )
+    .all();
+  if (busy.length > 0) {
+    throw new AppError(
+      'REPO_BUSY',
+      `cannot delete the ${subject} while its rebuild jobs are pending or running`,
+      409,
+    );
+  }
+}
 
 const createRepoSchema = z.object({
   name: z
@@ -19,6 +41,12 @@ const createRepoSchema = z.object({
     .max(64)
     .regex(/^[a-z0-9-]+$/),
   type: z.enum(['pacman', 'deb', 'rpm', 'flatpak']),
+  env: z
+    .string()
+    .min(1)
+    .max(32)
+    .regex(/^[a-z0-9-]+$/)
+    .optional(),
 });
 
 const reposRoutes: FastifyPluginAsync = async (fastify) => {
@@ -32,26 +60,67 @@ const reposRoutes: FastifyPluginAsync = async (fastify) => {
       throw new AppError('CONFLICT', 'repo name already exists', 409);
     }
 
+    assertTypeAvailable(body.type, await scanToolchain());
+
+    const envName = body.env ?? 'stable';
     db.insert(schema.repos)
       .values({ id, name: body.name, type: body.type, createdAt: nowSeconds() })
       .run();
-    db.insert(schema.envs).values({ id: envId, repoId: id, name: 'stable' }).run();
+    db.insert(schema.envs).values({ id: envId, repoId: id, name: envName }).run();
     ensureRepoEnvDir(id, envId);
     generateRepoKey(id);
 
     reply.status(201);
     return {
       success: true,
-      data: { id, name: body.name, type: body.type, envs: [{ id: envId, name: 'stable' }] },
+      data: { id, name: body.name, type: body.type, envs: [{ id: envId, name: envName }] },
     };
   });
 
   fastify.get('/', async () => {
     const rows = db.select().from(schema.repos).all();
+    const envs = db.select().from(schema.envs).all();
+    const counts = db
+      .select({ envId: schema.packages.envId, count: sql<number>`count(*)` })
+      .from(schema.packages)
+      .groupBy(schema.packages.envId)
+      .all();
+    const envIdsByRepo = new Map<string, { id: string; name: string }[]>();
+    for (const env of envs) {
+      const list = envIdsByRepo.get(env.repoId) ?? [];
+      list.push({ id: env.id, name: env.name });
+      envIdsByRepo.set(env.repoId, list);
+    }
+    const countByEnvId = new Map(counts.map((c) => [c.envId, c.count]));
+
     return {
       success: true,
-      data: rows.map((row) => ({ ...row, createdAt: row.createdAt * 1000 })),
+      data: rows.map((row) => {
+        const envList = envIdsByRepo.get(row.id) ?? [];
+        return {
+          ...row,
+          createdAt: row.createdAt * 1000,
+          envs: envList,
+          packageCount: envList.reduce((sum, env) => sum + (countByEnvId.get(env.id) ?? 0), 0),
+        };
+      }),
     };
+  });
+
+  fastify.delete('/:repo', async (request) => {
+    requireAdmin(request);
+    const { repo } = request.params as { repo: string };
+    const repoRow = resolveRepo(repo);
+    guardNoRunningJobs(repoRow.id, 'repository');
+
+    // DB first (cascades envs/packages, nulls job refs); disk cleanup after.
+    db.delete(schema.repos).where(eq(schema.repos.id, repoRow.id)).run();
+
+    const envDir = join(config.DATA_DIR, 'repos', repoRow.id);
+    rmSync(envDir, { recursive: true, force: true });
+    rmSync(gpgHome(repoRow.id), { recursive: true, force: true });
+
+    return { success: true };
   });
 
   fastify.get('/:repo', async (request) => {
@@ -82,15 +151,6 @@ const reposRoutes: FastifyPluginAsync = async (fastify) => {
     const data = all.slice((pageNum - 1) * pageSize, pageNum * pageSize);
 
     return { success: true, data, pagination: { page: pageNum, pageSize, total } };
-  });
-
-  fastify.get('/:repo/:env/gpg-public-key', async (request, reply) => {
-    const { repo } = request.params as { repo: string };
-    const row = resolveRepo(repo);
-    const armored = publicKey(row.id);
-    if (!armored) throw new AppError('NOT_FOUND', 'no gpg key for repo', 404);
-    reply.type('text/plain');
-    return armored;
   });
 
   fastify.get('/:repo/:env/setup-snippet', async (request) => {

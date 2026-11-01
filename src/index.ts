@@ -2,12 +2,21 @@ import { buildServer } from './server.js';
 import { applyMigrations } from './db/index.js';
 import { bootstrapAdmin } from './auth/bootstrap.js';
 import { config } from './config.js';
+import { scanToolchain } from './lib/toolchain.js';
 
 async function main() {
   applyMigrations();
   await bootstrapAdmin();
 
   const server = buildServer();
+
+  for (const [type, cap] of Object.entries(await scanToolchain())) {
+    if (!cap.ok) {
+      server.log.warn(
+        `toolchain: ${type} repositories are disabled — missing tools: ${cap.missing.join(', ')}`,
+      );
+    }
+  }
 
   for (const signal of ['SIGTERM', 'SIGINT'] as const) {
     process.on(signal, () => {

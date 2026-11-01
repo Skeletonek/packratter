@@ -1,19 +1,25 @@
-import { get } from 'svelte/store';
+import { goto } from '$app/navigation';
+import { resolve } from '$app/paths';
 import { showError } from './errorStore.js';
-import { apiToken } from './tokenStore.js';
 
-export function authHeaders(): Record<string, string> {
-  const token = get(apiToken);
-  return token ? { authorization: `Bearer ${token}` } : {};
+export interface ApiEnvelope {
+  success?: boolean;
+  error?: { code?: string; message?: string };
 }
 
-export function handleApiError(
-  prefix: string,
-  json: { error?: { code?: string; message?: string } },
-) {
+export interface UserInfo {
+  id: string;
+  login: string;
+  email: string | null;
+  displayName: string | null;
+  role: string;
+}
+
+// Signed-in browsers send the session cookie automatically; no token headers.
+export function handleApiError(prefix: string, json: ApiEnvelope) {
   const code = json.error?.code ?? prefix;
   if (code === 'UNAUTHORIZED') {
-    showError(code, 'Missing or invalid API token. Set it via the token button in the top bar.');
+    void goto(resolve('/login'));
     return;
   }
   showError(code, json.error?.message ?? 'Unexpected server response');

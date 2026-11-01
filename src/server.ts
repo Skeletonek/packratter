@@ -1,4 +1,5 @@
 import Fastify, { type FastifyError, type FastifyReply, type FastifyRequest } from 'fastify';
+import fastifyCookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
 import fastifyRateLimit from '@fastify/rate-limit';
 import { ZodError } from 'zod';
@@ -8,12 +9,15 @@ import { config } from './config.js';
 import { AppError } from './errors.js';
 import { errorPage } from './lib/errorPage.js';
 import { registerAuth } from './api/plugins/auth.js';
+import authRoutes from './api/routes/auth.js';
 import reposRoutes from './api/routes/repos.js';
 import packagesRoutes from './api/routes/packages.js';
 import envsRoutes from './api/routes/envs.js';
 import jobsRoutes from './api/routes/jobs.js';
+import toolchainRoutes from './api/routes/toolchain.js';
 import { resolveEnv, resolveRepo } from './lib/repos.js';
 import { formats, type RepoType } from './formats/index.js';
+import { publicKey } from './gpg/index.js';
 
 const uiRoot = join(import.meta.dirname, '../dist/ui');
 const hasUi = existsSync(uiRoot);
@@ -114,6 +118,9 @@ export function buildServer() {
     timestamp: new Date().toISOString(),
   }));
 
+  // Session cookies need cookie parsing; request cookies are set by auth routes.
+  void app.register(fastifyCookie);
+
   // Reads stay unlimited so package managers can burst; only writes are
   // throttled. Disabled in tests and when RATE_LIMIT_MAX=0.
   if (config.RATE_LIMIT_MAX > 0 && config.NODE_ENV !== 'test') {
@@ -130,6 +137,8 @@ export function buildServer() {
 
   registerAuth(app);
 
+  void app.register(authRoutes, { prefix: '/api/v1' });
+  void app.register(toolchainRoutes, { prefix: '/api/v1/toolchain' });
   void app.register(reposRoutes, { prefix: '/api/v1/repos' });
   void app.register(packagesRoutes, { prefix: '/api/v1/repos' });
   void app.register(envsRoutes, { prefix: '/api/v1/repos' });
@@ -142,6 +151,19 @@ export function buildServer() {
   // route ourselves so we can translate the env *name* (e.g. "stable") to the
   // env UUID directory on disk.
   void app.register(fastifyStatic, { root: reposRoot, serve: false });
+
+  // The repo public key is machine-readable for clients (dnf gpgkey=, curl in
+  // setup snippets), so it lives in the public /r/ zone, not behind the API.
+  app.get('/r/:repo/:env/gpg-public-key', async (request: FastifyRequest, reply: FastifyReply) => {
+    const { repo } = request.params as { repo: string };
+    const repoRow = resolveRepo(repo);
+    const armored = publicKey(repoRow.id);
+    if (!armored) {
+      throw new AppError('NOT_FOUND', 'no gpg key for repo', 404);
+    }
+    void reply.type('text/plain; charset=utf-8');
+    return armored;
+  });
 
   app.get('/r/:repo/:env/*', async (request: FastifyRequest, reply: FastifyReply) => {
     const { repo, env } = request.params as { repo: string; env: string };

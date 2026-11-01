@@ -161,7 +161,7 @@ baseurl=${baseUrl}/r/${repoName}/${envName}/rpm
 enabled=1
 gpgcheck=0
 repo_gpgcheck=1
-gpgkey=${baseUrl}/api/v1/repos/${repoName}/${envName}/gpg-public-key
+gpgkey=${baseUrl}/r/${repoName}/${envName}/gpg-public-key
 EOF
 
 sudo dnf makecache --refresh

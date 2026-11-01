@@ -1,10 +1,34 @@
 # Changelog
 
+## 0.6.0 — 2026-11-01
+
+### Changes
+
+- The API now requires signing in — reads included, via a login/password session for the web UI and per-user API keys for scripts.
+- Each user manages their own API keys — no more shared bootstrap key.
+- Admins can create, edit, and delete team accounts in a new Users page.
+- The Account page covers profile changes, password changes, and API keys.
+- The per-repo public key is now served publicly under `/r/`.
+- Ecosystems with missing server tooling are disabled and reported in a UI banner.
+- Ecosystems can be switched off deliberately with `DISABLE_<TYPE>=1`.
+- Repositories can be deleted; environments can be renamed or deleted (admin-only).
+- The first environment name is now selectable at creation and defaults to `stable`.
+- The repositories page gains a list view showing environments and package counts.
+- A custom UI color theme derived from the mascot.
+- Admins can reset a user's password with a one-time generated value.
+
+### Security
+
+- Session cookies are httpOnly, `SameSite=Lax`, and `Secure` in production.
+- Session ids are stored hashed, so a database copy cannot hijack sessions.
+- `ADMIN_PASS` is optional — the generated first-boot admin password is printed once.
+- No API token is printed at startup anymore.
+
 ## 0.5.1 — 2026-11-01
 
 ### Fixes
 
-- Rebuilding the server no longer nests migration files when `dist/` already exists, which could leave new migrations unapplied on startup.
+- Rebuilding the server no longer nests migration files in `dist/`, leaving new migrations unapplied.
 
 ## 0.5.0 — 2026-11-01
 

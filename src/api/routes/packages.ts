@@ -10,6 +10,7 @@ import { AppError } from '../../errors.js';
 import { config } from '../../config.js';
 import { nowSeconds } from '../../lib/time.js';
 import { resolveEnv, resolveRepo } from '../../lib/repos.js';
+import { assertTypeAvailable, scanToolchain } from '../../lib/toolchain.js';
 import { formats, type RepoType } from '../../formats/index.js';
 import type { PackageMeta } from '../../formats/types.js';
 import { enqueueRebuild } from '../../jobs/queue.js';
@@ -55,6 +56,8 @@ const packagesRoutes: FastifyPluginAsync = async (fastify) => {
       const { repo, env } = request.params as { repo: string; env: string };
       const repoRow = resolveRepo(repo);
       const format = formats[repoRow.type as RepoType];
+
+      assertTypeAvailable(repoRow.type as RepoType, await scanToolchain());
 
       const envRow = resolveEnv(repoRow.id, env);
 

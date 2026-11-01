@@ -11,6 +11,15 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [sveltekit()],
+    css: {
+      preprocessorOptions: {
+        scss: {
+          // Bootstrap 5.3's own SCSS still uses the legacy patterns; silence
+          // only those, so genuinely new warnings remain visible.
+          silenceDeprecations: ['import', 'if-function', 'global-builtin', 'color-functions'],
+        },
+      },
+    },
     server: {
       // Expose externally when run inside a container (see docker-compose.dev.yml).
       host: process.env.VITE_HOST === '1',

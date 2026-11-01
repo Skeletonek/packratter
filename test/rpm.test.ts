@@ -64,9 +64,7 @@ describe('rpm format', () => {
     expect(snippet).toContain('/etc/yum.repos.d/myrepo.repo');
     expect(snippet).toContain('baseurl=http://localhost:5000/r/myrepo/stable/rpm');
     expect(snippet).toContain('repo_gpgcheck=1');
-    expect(snippet).toContain(
-      'gpgkey=http://localhost:5000/api/v1/repos/myrepo/stable/gpg-public-key',
-    );
+    expect(snippet).toContain('gpgkey=http://localhost:5000/r/myrepo/stable/gpg-public-key');
     expect(snippet).toContain('dnf install');
   });
 

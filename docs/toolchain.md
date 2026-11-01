@@ -8,6 +8,17 @@ upload fails validation or the rebuild job fails, and the job log shows the erro
 If you use the provided Docker image (Fedora 44 base — see `Dockerfile`),
 everything below is already installed and nothing else is needed.
 
+Packratter checks these tools live on every repo creation and upload, and scans the
+set once at startup (the missing ones are logged as warnings). A type with missing
+tools is disabled: creating or uploading to such a repo answers `409
+TOOLCHAIN_MISSING` with the exact tool names, and the web UI shows which ecosystems
+are unavailable and why. Installing a missing tool is picked up on the next request —
+no restart needed.
+
+An ecosystem can be turned off even when its tools exist, via `DISABLE_PACMAN=1`,
+`DISABLE_DEB=1`, `DISABLE_RPM=1` or `DISABLE_FLATPAK=1` (see `.env.example`). Such a
+type answers `409 TYPE_DISABLED` and is intentionally silent in the UI.
+
 ## Tools per ecosystem
 
 | Ecosystem | Tools                        | Used for                                                                                                               |
@@ -19,7 +30,7 @@ everything below is already installed and nothing else is needed.
 
 Independently of the ecosystem:
 
-- **Node.js 22+** is required to run Packratter itself. 
+- **Node.js 22+** is required to run Packratter itself.
 - **`gnupg2`** is required for every repo: a GPG key is generated per repo at
   creation time and used for all metadata signing.
 

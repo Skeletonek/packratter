@@ -52,7 +52,11 @@ describe('jobs API', () => {
     seedJob(older, 'error', 1000);
     seedJob(newer, 'done', 2000);
 
-    const res = await server.inject({ method: 'GET', url: '/api/v1/jobs' });
+    const res = await server.inject({
+      method: 'GET',
+      url: '/api/v1/jobs',
+      headers: auth(),
+    });
     expect(res.statusCode).toBe(200);
     const json = res.json();
     const ids = json.data.map((j: { id: string }) => j.id);
@@ -61,13 +65,21 @@ describe('jobs API', () => {
   });
 
   it('returns a single job with its log', async () => {
-    const res = await server.inject({ method: 'GET', url: `/api/v1/jobs/${newer}` });
+    const res = await server.inject({
+      method: 'GET',
+      url: `/api/v1/jobs/${newer}`,
+      headers: auth(),
+    });
     expect(res.statusCode).toBe(200);
     expect(res.json().data.log).toBe(`log ${newer}`);
   });
 
   it('rejects the env filter without a repo filter', async () => {
-    const res = await server.inject({ method: 'GET', url: '/api/v1/jobs?env=stable' });
+    const res = await server.inject({
+      method: 'GET',
+      url: '/api/v1/jobs?env=stable',
+      headers: auth(),
+    });
     expect(res.statusCode).toBe(400);
   });
 

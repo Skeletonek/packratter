@@ -34,6 +34,15 @@ function safeFilename(text: string): string {
   return text.replace(/[^a-zA-Z0-9.+~_-]/g, '_');
 }
 
+export function renameEnv(env: EnvRef, newName: string): void {
+  const root = debRoot(env);
+  const oldDir = join(root, 'dists', env.name);
+  const newDir = join(root, 'dists', newName);
+  if (existsSync(oldDir)) {
+    renameSync(oldDir, newDir);
+  }
+}
+
 function readMagic(path: string, length: number): Buffer {
   const fd = openSync(path, 'r');
   try {
@@ -227,7 +236,7 @@ export function setupSnippet(
   envName: string,
   _fingerprint: string,
 ): string {
-  return `curl -fsSL ${baseUrl}/api/v1/repos/${repoName}/${envName}/gpg-public-key \\
+  return `curl -fsSL ${baseUrl}/r/${repoName}/${envName}/gpg-public-key \\
   | sudo gpg --dearmor -o /usr/share/keyrings/${repoName}.gpg
 
 echo "deb [signed-by=/usr/share/keyrings/${repoName}.gpg] ${baseUrl}/r/${repoName}/${envName}/deb ${envName} main" \\

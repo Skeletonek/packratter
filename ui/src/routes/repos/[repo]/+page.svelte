@@ -1,8 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { page } from '$app/state';
-  import { authHeaders, handleApiError } from '$lib/api.js';
+  import { handleApiError } from '$lib/api.js';
   import { showError } from '$lib/errorStore.js';
+  import { user } from '$lib/userStore.js';
   import { formatBytes } from '$lib/format.js';
   import JobsPanel from '$lib/JobsPanel.svelte';
   import PromotePanel from '$lib/PromotePanel.svelte';
@@ -27,7 +28,7 @@
   let message = '';
   let snippet = '';
   let snippetCopied = false;
-  let activeTab = 'upload';
+  let activeTab = 'packages';
   let showNewEnv = false;
   let newEnvName = '';
 
@@ -54,12 +55,51 @@
     load().catch((e) => showError('LOAD_FAILED', String(e)));
   }
 
-  async function createEnv() {
-    const name = newEnvName.trim();
+  async function renameEnv(oldName: string) {
+    const next = prompt(`Rename environment "${oldName}" to:`, oldName);
+    if (!next || next === oldName) return;
+    const res = await fetch(`/api/v1/repos/${repoName}/envs/${oldName}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: next }),
+    });
+    if (!res.ok) {
+      handleApiError('RENAME_FAILED', await res.json());
+      return;
+    }
+    if (oldName === activeEnv) activeEnv = next;
+    await load();
+  }
+
+  async function deleteEnv(name: string) {
+    if (!confirm(`Delete environment "${name}"? Its packages and metadata are gone for good.`)) return;
+    const res = await fetch(`/api/v1/repos/${repoName}/envs/${name}`, { method: 'DELETE' });
+    if (!res.ok) {
+      handleApiError('DELETE_ENV_FAILED', await res.json());
+      return;
+    }
+    if (activeEnv === name) {
+      const remaining = envs.find((env) => env.name !== name);
+      activeEnv = remaining?.name ?? activeEnv;
+    }
+    await load();
+  }
+
+  async function deleteRepo() {
+    if (!confirm(`Delete repository "${repoName}"? All its environments, packages and keys are gone for good.`)) return;
+    const res = await fetch(`/api/v1/repos/${repoName}`, { method: 'DELETE' });
+    if (!res.ok) {
+      handleApiError('DELETE_FAILED', await res.json());
+      return;
+    }
+    goto('/');
+  }
+
+  async function createEnv() {    const name = newEnvName.trim();
     if (!name) return;
     const res = await fetch(`/api/v1/repos/${repoName}/envs`, {
       method: 'POST',
-      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name }),
     });
     const json = await res.json();
@@ -80,7 +120,7 @@
     try {
       const res = await fetch(`/api/v1/repos/${repoName}/${activeEnv}/packages`, {
         method: 'PUT',
-        headers: { ...authHeaders(), 'Content-Type': 'application/octet-stream' },
+        headers: { 'Content-Type': 'application/octet-stream' },
         body: file[0],
       });
       const json = await res.json();
@@ -104,7 +144,6 @@
       `/api/v1/repos/${repoName}/${activeEnv}/packages/${encodeURIComponent(filename)}`,
       {
         method: 'DELETE',
-        headers: authHeaders(),
       },
     );
     const json = await res.json();
@@ -173,9 +212,6 @@
 
   <ul class="nav nav-tabs mb-3">
     <li class="nav-item">
-      <button class="nav-link" class:active={activeTab === 'upload'} on:click={() => (activeTab = 'upload')}>Upload</button>
-    </li>
-    <li class="nav-item">
       <button class="nav-link" class:active={activeTab === 'packages'} on:click={() => (activeTab = 'packages')}>
         Packages {#if packages.length}<span class="badge text-bg-secondary ms-1">{packages.length}</span>{/if}
       </button>
@@ -189,10 +225,17 @@
     <li class="nav-item">
       <button class="nav-link" class:active={activeTab === 'setup'} on:click={() => (activeTab = 'setup')}>Setup</button>
     </li>
+    {#if $user?.role === 'admin'}
+      <li class="nav-item ms-auto">
+        <button class="nav-link text-body-secondary" class:active={activeTab === 'settings'} on:click={() => (activeTab = 'settings')}>
+          <i class="bi bi-gear"></i> Settings
+        </button>
+      </li>
+    {/if}
   </ul>
 
-  {#if activeTab === 'upload'}
-    <div class="card shadow-sm">
+  {#if activeTab === 'packages'}
+    <div class="card shadow-sm mb-4">
       <div class="card-body">
         <h5 class="card-title">Upload package</h5>
         {#if repoType === 'flatpak'}
@@ -249,9 +292,7 @@
         {/if}
       </div>
     </div>
-  {/if}
 
-  {#if activeTab === 'packages'}
     <div class="card shadow-sm">
       <div class="card-body">
         <h5 class="card-title">Packages in {activeEnv}</h5>
@@ -332,6 +373,45 @@
         {:else}
           <p class="text-body-secondary mb-0">Loading setup snippet…</p>
         {/if}
+      </div>
+    </div>
+  {/if}
+
+  {#if activeTab === 'settings'}
+    <div class="card shadow-sm mb-4">
+      <div class="card-body">
+        <h5 class="card-title">Environment: {activeEnv}</h5>
+        <p class="small text-body-secondary">
+          The environment name appears in client URLs ({repoName}/{activeEnv}); renaming it means
+          clients need updated configuration.
+        </p>
+        <div class="d-flex gap-2">
+          <button type="button" class="btn btn-sm btn-outline-secondary" on:click={() => renameEnv(activeEnv)}>
+            <i class="bi bi-pencil me-1"></i>Rename
+          </button>
+          <button
+            type="button"
+            class="btn btn-sm btn-outline-danger"
+            disabled={envs.length === 1}
+            title={envs.length === 1 ? 'the last environment cannot be deleted' : undefined}
+            on:click={() => void deleteEnv(activeEnv)}
+          >
+            <i class="bi bi-trash me-1"></i>Delete
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card border-danger">
+      <div class="card-body">
+        <h5 class="card-title text-danger">Danger zone</h5>
+        <p class="small text-body-secondary">
+          Deleting the repository removes every environment, package and GPG key for
+          {"\"" + repoName + "\""} permanently. Blocked while rebuild jobs are running.
+        </p>
+        <button type="button" class="btn btn-sm btn-danger" on:click={() => void deleteRepo()}>
+          <i class="bi bi-trash me-1"></i>Delete repository
+        </button>
       </div>
     </div>
   {/if}

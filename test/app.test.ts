@@ -1,5 +1,6 @@
 import { rmSync } from 'node:fs';
-import { beforeAll, afterAll, describe, expect, it } from 'vitest';
+import { eq } from 'drizzle-orm';
+import { beforeAll, afterAll, describe, expect, it, vi } from 'vitest';
 
 import { applyMigrations, db, sqlite } from '../src/db/index.js';
 import { bootstrapAdmin } from '../src/auth/bootstrap.js';
@@ -26,7 +27,7 @@ describe('config', () => {
 });
 
 describe('bootstrapAdmin', () => {
-  it('creates the admin user and a token on first run', async () => {
+  it('creates the admin user from the environment, without any token', async () => {
     await bootstrapAdmin();
 
     const users = db.select().from(schema.users).all();
@@ -35,9 +36,7 @@ describe('bootstrapAdmin', () => {
     expect(users[0].role).toBe('admin');
 
     const tokens = db.select().from(schema.tokens).all();
-    expect(tokens).toHaveLength(1);
-    expect(tokens[0].scopes).toBe('admin');
-    expect(tokens[0].prefix).toHaveLength(12);
+    expect(tokens).toHaveLength(0);
   });
 
   it('is idempotent across multiple invocations', async () => {
@@ -45,7 +44,30 @@ describe('bootstrapAdmin', () => {
     await bootstrapAdmin();
 
     expect(db.select().from(schema.users).all()).toHaveLength(1);
-    expect(db.select().from(schema.tokens).all()).toHaveLength(1);
+    expect(db.select().from(schema.tokens).all()).toHaveLength(0);
+  });
+
+  it('generates and prints a one-time password when ADMIN_PASS is unset', async () => {
+    const prevUser = config.ADMIN_USER;
+    config.ADMIN_USER = 'generated-admin';
+    config.ADMIN_PASS = undefined;
+    const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    try {
+      await bootstrapAdmin();
+
+      expect(db.select().from(schema.users).all()).toHaveLength(2);
+      expect(
+        db.select().from(schema.users).where(eq(schema.users.login, 'generated-admin')).all()[0]
+          ?.role,
+      ).toBe('admin');
+      const printed = write.mock.calls.map((call) => String(call[0])).join('');
+      expect(printed).toMatch(/ADMIN PASSWORD/);
+      const password = /===\n(\S+)\n===/.exec(printed)?.[1];
+      expect(password).toBeDefined();
+    } finally {
+      write.mockRestore();
+      config.ADMIN_USER = prevUser;
+    }
   });
 });
 

@@ -184,7 +184,11 @@ describe.skipIf(process.env.RUN_FULL_TESTS !== '1')('Envs, diff, and promote', (
     const jobs = res.json().data as { envId: string }[];
     expect(jobs.length).toBeGreaterThan(0);
 
-    const repo = await server.inject({ method: 'GET', url: `/api/v1/repos/${repoName}` });
+    const repo = await server.inject({
+      method: 'GET',
+      url: `/api/v1/repos/${repoName}`,
+      headers: auth(),
+    });
     const testingEnvId = repo
       .json()
       .data.envs.find((e: { name: string }) => e.name === 'testing').id;

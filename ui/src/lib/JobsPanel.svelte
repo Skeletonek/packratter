@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
-  import { authHeaders, handleApiError } from '$lib/api.js';
+  import { handleApiError } from '$lib/api.js';
 
   export let repoName: string;
 
@@ -36,7 +36,6 @@
   async function retry(jobId: string) {
     const res = await fetch(`/api/v1/jobs/${jobId}/retry`, {
       method: 'POST',
-      headers: authHeaders(),
     });
     const json = await res.json();
     if (!json.success) {

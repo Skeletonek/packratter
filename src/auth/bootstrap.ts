@@ -1,60 +1,53 @@
 import { eq } from 'drizzle-orm';
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { db } from '../db/index.js';
 import * as schema from '../db/schema.js';
 import { config } from '../config.js';
 import { hashPassword } from './password.js';
-import { generateToken } from './tokens.js';
+import { purgeExpiredSessions } from './sessions.js';
 
 function nowSeconds(): number {
   return Math.floor(Date.now() / 1000);
 }
 
 export async function bootstrapAdmin(): Promise<void> {
+  purgeExpiredSessions();
+
   const admins = db
     .select()
     .from(schema.users)
     .where(eq(schema.users.login, config.ADMIN_USER))
     .all();
 
-  let admin = admins[0];
-  if (!admin) {
-    db.insert(schema.users)
-      .values({
-        id: randomUUID(),
-        login: config.ADMIN_USER,
-        passHash: await hashPassword(config.ADMIN_PASS),
-        role: 'admin',
-        createdAt: nowSeconds(),
-      })
-      .run();
-    const created = db
-      .select()
-      .from(schema.users)
-      .where(eq(schema.users.login, config.ADMIN_USER))
-      .all();
-    admin = created[0];
-    if (!admin) {
-      throw new Error('bootstrap: failed to create admin user');
-    }
+  if (admins.length > 0) {
+    return;
   }
 
-  const existingTokens = db.select().from(schema.tokens).all();
-  if (existingTokens.length === 0) {
-    const { token, prefix, hash } = await generateToken();
-    db.insert(schema.tokens)
-      .values({
-        id: randomUUID(),
-        userId: admin.id,
-        prefix,
-        hash,
-        scopes: 'admin',
-        createdAt: nowSeconds(),
-      })
-      .run();
+  const password = config.ADMIN_PASS ?? randomBytes(16).toString('base64url');
+  const generated = config.ADMIN_PASS === undefined;
 
+  db.insert(schema.users)
+    .values({
+      id: randomUUID(),
+      login: config.ADMIN_USER,
+      passHash: await hashPassword(password),
+      role: 'admin',
+      createdAt: nowSeconds(),
+    })
+    .run();
+
+  const admin = db
+    .select()
+    .from(schema.users)
+    .where(eq(schema.users.login, config.ADMIN_USER))
+    .all()[0];
+  if (!admin) {
+    throw new Error('bootstrap: failed to create admin user');
+  }
+
+  if (generated) {
     process.stdout.write(
-      `\n=== PACKRATTER BOOTSTRAP TOKEN (save it, it will not be shown again) ===\n${token}\n===\n\n`,
+      `\n=== PACKRATTER ADMIN PASSWORD (save it, it will not be shown again) ===\n${password}\n===\n\n`,
     );
   }
 }

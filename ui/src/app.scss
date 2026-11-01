@@ -1,0 +1,64 @@
+// Packratter theme — derived from the mascot: chipmunk hazel, teal crates.
+@import 'bootstrap-icons/font/bootstrap-icons.min.css';
+
+// Bootstrap is built from source so every token below compiles into buttons,
+// badges, alerts, nav states, focus rings and link colors — light and dark.
+$primary: #9a6b3f;
+$secondary: #2b7d70;
+// Distinctly warm page tint; cards stay #fff for contrast.
+$body-bg: #f5ead9;
+$body-bg-dark: #1a1713;
+// Navbar/footer chrome: hazelnut sand above the page tint (both themes).
+$body-tertiary-bg: #ece0cc;
+$body-tertiary-bg-dark: #241f18;
+$border-radius: 0.45rem;
+$border-radius-sm: 0.35rem;
+$border-radius-lg: 0.6rem;
+
+// The page gets the warm tint; cards stay plain so they keep their pop.
+$card-bg: #ffffff;
+
+@import 'bootstrap/scss/bootstrap';
+
+// Compiled .card pins its vars on the element itself, so the dark variants
+// must also target the element (not just inherit from the html attribute).
+[data-bs-theme='dark'] .card {
+  --bs-card-bg: #221e19;
+  --bs-card-cap-bg: #2a251e;
+}
+
+// Cream accent card (Create repository) — clearly warmer than plain cards.
+.card-create {
+  --bs-card-bg: #f8efdd;
+}
+
+[data-bs-theme='dark'] .card-create {
+  --bs-card-bg: #2c261e;
+}
+
+// App shell: header/footer floats via flex column.
+html,
+body {
+  height: 100%;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+}
+
+pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+dialog {
+  border: none;
+  padding: 0;
+  background: transparent;
+  max-width: 90vw;
+}
+
+dialog::backdrop {
+  background: rgba(0, 0, 0, 0.5);
+}
