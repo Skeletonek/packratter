@@ -7,6 +7,8 @@ export const repos = sqliteTable('repos', {
   // flatpak only: where bundle refs come from — 'env' names the branch after
   // the environment, 'bundle' keeps whatever branch the bundle was built with.
   branchMode: text('branch_mode').notNull().default('env'),
+  // every signed-in user gets viewer access without an explicit grant
+  allUsers: integer('all_users', { mode: 'boolean' }).notNull().default(false),
   createdAt: integer('created_at').notNull(),
 });
 
@@ -82,6 +84,21 @@ export const repoMembers = sqliteTable(
   },
   (table) => [primaryKey({ columns: [table.repoId, table.userId] })],
 );
+
+export const ssoConfig = sqliteTable('sso_config', {
+  /** Single row, id 'default'. */
+  id: text().primaryKey(),
+  enabled: integer({ mode: 'boolean' }).notNull().default(true),
+  issuer: text().notNull(),
+  clientId: text('client_id').notNull(),
+  /** Null for public OIDC clients (PKCE only). Never served to the UI. */
+  clientSecret: text('client_secret'),
+  scopes: text().notNull(),
+  adminClaim: text('admin_claim'),
+  adminValue: text('admin_value'),
+  autoCreate: integer('auto_create', { mode: 'boolean' }).notNull().default(true),
+  seededFromEnv: integer('seeded_from_env', { mode: 'boolean' }).notNull().default(false),
+});
 
 export const sessions = sqliteTable('sessions', {
   // sha256 of the cookie value, never the value itself

@@ -2,15 +2,21 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import * as schema from '../db/schema.js';
-import { config } from '../config.js';
 import { AppError } from '../errors.js';
 import { nowSeconds } from '../lib/time.js';
 
 export const SSO_STATE_COOKIE = 'pks_sso';
 export const STATE_TTL_SECONDS = 600;
 
+type SsoConfigRow = typeof schema.ssoConfig.$inferSelect;
+
+export function loadSsoConfig(): SsoConfigRow | null {
+  return db.select().from(schema.ssoConfig).all()[0] ?? null;
+}
+
 export function ssoEnabled(): boolean {
-  return Boolean(config.SSO_ISSUER && config.SSO_CLIENT_ID && config.SSO_CLIENT_SECRET);
+  const row = loadSsoConfig();
+  return row !== null && row.enabled;
 }
 
 // ---- discovery -----------------------------------------------------------
@@ -21,11 +27,14 @@ interface Discovery {
   userinfo_endpoint: string;
 }
 
-let discoveryCache: Discovery | null = null;
+let discoveryCache: { issuer: string; doc: Promise<Discovery> } | null = null;
 
-async function discover(): Promise<Discovery> {
-  if (discoveryCache) return discoveryCache;
-  const base = config.SSO_ISSUER!.replace(/\/$/, '');
+export function clearDiscoveryCache(): void {
+  discoveryCache = null;
+}
+
+async function fetchDiscovery(issuer: string): Promise<Discovery> {
+  const base = issuer.replace(/\/$/, '');
   const res = await fetch(`${base}/.well-known/openid-configuration`);
   if (!res.ok) {
     throw new AppError('SSO_ERROR', `OIDC discovery failed with status ${res.status}`, 502);
@@ -34,8 +43,31 @@ async function discover(): Promise<Discovery> {
   if (!doc.authorization_endpoint || !doc.token_endpoint || !doc.userinfo_endpoint) {
     throw new AppError('SSO_ERROR', 'OIDC discovery document is missing required endpoints', 502);
   }
-  discoveryCache = doc as Discovery;
-  return discoveryCache;
+  return doc as Discovery;
+}
+
+function discover(): Promise<Discovery> {
+  const row = loadSsoConfig();
+  if (!row) {
+    throw new AppError('SSO_ERROR', 'SSO is not configured', 400);
+  }
+  // The cache is keyed by issuer, so a reconfigured provider is picked up
+  // without an explicit invalidation; a failed fetch clears it to retry.
+  if (discoveryCache?.issuer !== row.issuer) {
+    discoveryCache = {
+      issuer: row.issuer,
+      doc: fetchDiscovery(row.issuer).catch((err) => {
+        discoveryCache = null;
+        throw err;
+      }),
+    };
+  }
+  return discoveryCache.doc;
+}
+
+/** Discovery against not-yet-saved values, for the settings test action. */
+export async function testDiscovery(issuer: string): Promise<Discovery> {
+  return fetchDiscovery(issuer);
 }
 
 // ---- PKCE state ----------------------------------------------------------
@@ -80,13 +112,17 @@ export function codeChallenge(verifier: string): string {
 
 // ---- provider calls ------------------------------------------------------
 
+const unconfigured = () => new AppError('SSO_ERROR', 'SSO is not configured', 400);
+
 export async function authorizationUrl(redirectUri: string, pending: PendingAuth): Promise<string> {
+  const row = loadSsoConfig();
+  if (!row) throw unconfigured();
   const discovery = await discover();
   const url = new URL(discovery.authorization_endpoint);
   url.searchParams.set('response_type', 'code');
-  url.searchParams.set('client_id', config.SSO_CLIENT_ID!);
+  url.searchParams.set('client_id', row.clientId);
   url.searchParams.set('redirect_uri', redirectUri);
-  url.searchParams.set('scope', config.SSO_SCOPES ?? 'openid profile email');
+  url.searchParams.set('scope', row.scopes);
   url.searchParams.set('state', pending.state);
   url.searchParams.set('code_challenge', codeChallenge(pending.verifier));
   url.searchParams.set('code_challenge_method', 'S256');
@@ -98,18 +134,24 @@ export async function exchangeCode(
   verifier: string,
   redirectUri: string,
 ): Promise<Record<string, unknown>> {
+  const row = loadSsoConfig();
+  if (!row) throw unconfigured();
   const discovery = await discover();
+
+  const params = new URLSearchParams({
+    grant_type: 'authorization_code',
+    code,
+    redirect_uri: redirectUri,
+    client_id: row.clientId,
+    code_verifier: verifier,
+  });
+  // Public OIDC clients authenticate with PKCE alone.
+  if (row.clientSecret) params.set('client_secret', row.clientSecret);
+
   const tokenRes = await fetch(discovery.token_endpoint, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type: 'authorization_code',
-      code,
-      redirect_uri: redirectUri,
-      client_id: config.SSO_CLIENT_ID!,
-      client_secret: config.SSO_CLIENT_SECRET!,
-      code_verifier: verifier,
-    }),
+    body: params,
   });
   if (!tokenRes.ok) {
     throw new AppError('SSO_ERROR', `token exchange failed with status ${tokenRes.status}`, 502);
@@ -140,10 +182,11 @@ export interface SsoPolicy {
 }
 
 export function policyFromConfig(): SsoPolicy {
+  const row = loadSsoConfig();
   return {
-    autoCreate: config.SSO_AUTO_CREATE,
-    adminClaim: config.SSO_ADMIN_CLAIM ?? null,
-    adminValue: config.SSO_ADMIN_VALUE ?? null,
+    autoCreate: row?.autoCreate ?? true,
+    adminClaim: row?.adminClaim ?? null,
+    adminValue: row?.adminValue ?? null,
   };
 }
 

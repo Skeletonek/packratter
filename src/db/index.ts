@@ -34,4 +34,29 @@ export function applyMigrations(): void {
     sqlite.exec(sql);
     sqlite.prepare('INSERT INTO _migrations (name) VALUES (?)').run(file);
   }
+
+  seedSsoConfig();
+}
+
+// The runtime-editable SSO configuration is seeded exactly once: an empty
+// table plus complete SSO_* env vars become its first row, after which the
+// row wins and later .env changes are inert.
+function seedSsoConfig(): void {
+  if (!config.SSO_ISSUER || !config.SSO_CLIENT_ID || !config.SSO_CLIENT_SECRET) return;
+  sqlite
+    .prepare(
+      `INSERT INTO sso_config
+         (id, enabled, issuer, client_id, client_secret, scopes, admin_claim, admin_value, auto_create, seeded_from_env)
+       SELECT 'default', 1, ?, ?, ?, ?, ?, ?, ?, 1
+       WHERE NOT EXISTS (SELECT 1 FROM sso_config)`,
+    )
+    .run(
+      config.SSO_ISSUER,
+      config.SSO_CLIENT_ID,
+      config.SSO_CLIENT_SECRET,
+      config.SSO_SCOPES ?? 'openid profile email',
+      config.SSO_ADMIN_CLAIM ?? null,
+      config.SSO_ADMIN_VALUE ?? null,
+      config.SSO_AUTO_CREATE ? 1 : 0,
+    );
 }

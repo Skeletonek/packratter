@@ -329,4 +329,50 @@ describe('per-repo access', () => {
       expect(res.statusCode, `${method} ${url}`).toBe(403);
     }
   });
+
+  it('allows making a repository readable by all signed-in users', async () => {
+    try {
+      const on = await server.inject({
+        method: 'PATCH',
+        url: `/api/v1/repos/${repoB}`,
+        headers: { ...auth('admin'), 'Content-Type': 'application/json' },
+        payload: { allUsers: true },
+      });
+      expect(on.statusCode).toBe(200);
+      expect(on.json().data.allUsers).toBe(true);
+
+      const list = await server.inject({
+        method: 'GET',
+        url: '/api/v1/repos',
+        headers: auth('carol'),
+      });
+      expect(list.json().data.map((r: { name: string }) => r.name)).toEqual([repoB]);
+
+      const browsed = await server.inject({
+        method: 'GET',
+        url: `/api/v1/repos/${repoB}/stable/packages`,
+        headers: auth('carol'),
+      });
+      expect(browsed.statusCode).toBe(200);
+
+      // viewer role instead of invisible: writes answer 403 FORBIDDEN
+      const write = await server.inject({
+        method: 'POST',
+        url: `/api/v1/repos/${repoB}/envs`,
+        headers: { ...auth('carol'), 'Content-Type': 'application/json' },
+        payload: { name: 'nope' },
+      });
+      expect(write.statusCode).toBe(403);
+      expect(write.json().error.code).toBe('FORBIDDEN');
+    } finally {
+      db.update(schema.repos).set({ allUsers: false }).where(eq(schema.repos.name, repoB)).run();
+    }
+
+    const hiddenAgain = await server.inject({
+      method: 'GET',
+      url: `/api/v1/repos/${repoB}/stable/packages`,
+      headers: auth('carol'),
+    });
+    expect(hiddenAgain.statusCode).toBe(404);
+  });
 });

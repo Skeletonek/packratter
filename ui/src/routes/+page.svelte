@@ -83,10 +83,22 @@
     <h1 class="mb-0">Repositories</h1>
     <div class="d-flex align-items-center gap-2">
       <div class="btn-group btn-group-sm" role="group" aria-label="View">
-        <button type="button" class="btn btn-outline-secondary" class:active={view === 'grid'} on:click={() => switchView('grid')}>
+        <button
+          type="button"
+          class="btn btn-outline-secondary"
+          class:active={view === 'grid'}
+          aria-label="Grid view"
+          on:click={() => switchView('grid')}
+        >
           <i class="bi bi-grid-3x3-gap"></i>
         </button>
-        <button type="button" class="btn btn-outline-secondary" class:active={view === 'list'} on:click={() => switchView('list')}>
+        <button
+          type="button"
+          class="btn btn-outline-secondary"
+          class:active={view === 'list'}
+          aria-label="List view"
+          on:click={() => switchView('list')}
+        >
           <i class="bi bi-list-ul"></i>
         </button>
       </div>

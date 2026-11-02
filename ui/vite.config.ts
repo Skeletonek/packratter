@@ -11,6 +11,15 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [sveltekit()],
+    build: {
+      // Vite 8 runs on rolldown, whose Rust core is fast enough that the
+      // framework's own JS compile and this theme's Bootstrap SCSS dominate
+      // the plugin-share heuristic, printing a [PLUGIN_TIMINGS] report on
+      // every build. It is a profiling aid only; restore it by deleting this.
+      rolldownOptions: {
+        checks: { bundlerTimings: false },
+      },
+    },
     css: {
       preprocessorOptions: {
         scss: {

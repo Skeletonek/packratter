@@ -24,7 +24,12 @@ function memberRole(user: AccessUser, repoId: string): string | null {
 /** Effective role for one repo; global admins are admins everywhere. */
 export function repoRole(user: AccessUser, repoId: string): RepoRole | null {
   if (user.role === 'admin') return 'admin';
-  return memberRole(user, repoId) as RepoRole | null;
+  const member = memberRole(user, repoId);
+  if (member) return member as RepoRole;
+  // Repositories marked readable-by-all-users grant viewer access to every
+  // signed-in account, grants or not.
+  const repo = db.select().from(schema.repos).where(eq(schema.repos.id, repoId)).all()[0];
+  return repo?.allUsers ? 'viewer' : null;
 }
 
 // No grant at all is 404, not 403: a repo the user cannot access must be
@@ -40,10 +45,17 @@ export function requireRepoRole(user: AccessUser, repoId: string, min: RepoRole)
 /** null = unrestricted (admin); otherwise the granted repo ids (possibly empty). */
 export function visibleRepoIds(user: AccessUser): string[] | null {
   if (user.role === 'admin') return null;
-  return db
+  const memberIds = db
     .select()
     .from(schema.repoMembers)
     .where(eq(schema.repoMembers.userId, user.id))
     .all()
     .map((row) => row.repoId);
+  const openIds = db
+    .select({ id: schema.repos.id })
+    .from(schema.repos)
+    .where(eq(schema.repos.allUsers, true))
+    .all()
+    .map((row) => row.id);
+  return [...new Set([...memberIds, ...openIds])];
 }

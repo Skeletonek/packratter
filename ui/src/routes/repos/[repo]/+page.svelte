@@ -39,6 +39,7 @@
   let savedBranchMode = 'env';
   let savingBranchMode = false;
   let yourRole = 'viewer';
+  let allUsers = false;
   let members: Member[] = [];
   let newMemberLogin = '';
   let newMemberRole = 'viewer';
@@ -68,6 +69,7 @@
     branchMode = repoJson.data.branchMode ?? 'env';
     savedBranchMode = branchMode;
     yourRole = repoJson.data.yourRole ?? 'viewer';
+    allUsers = repoJson.data.allUsers === true;
     packages = pkgJson.data;
     pkgCount = pkgJson.pagination?.total ?? packages.length;
     snippet = snippetJson.success ? snippetJson.data : '';
@@ -120,6 +122,19 @@
       handleApiError('MEMBER_REJECTED', await res.json());
     }
     await loadMembers();
+  }
+
+  async function saveAllUsers(checked: boolean) {
+    const res = await fetch(`/api/v1/repos/${repoName}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ allUsers: checked }),
+    });
+    const json = await res.json();
+    if (!json.success) {
+      handleApiError('PATCH_REPO_FAILED', json);
+      allUsers = !checked;
+    }
   }
 
   function switchEnv(name: string) {
@@ -527,6 +542,20 @@
             Maintainers publish packages and manage environments; viewers can only browse.
             Admins always have full access.
           </p>
+          <div class="form-check mb-3">
+            <input
+              id="all-users"
+              class="form-check-input"
+              type="checkbox"
+              checked={allUsers}
+              on:change={(e) => void saveAllUsers(e.currentTarget.checked)}
+            />
+            <label for="all-users" class="form-check-label small">Readable by all signed-in users</label>
+            <div class="form-text small">
+              Anyone with an account can browse this repository and its packages without a
+              grant; publishing still requires a maintainer grant.
+            </div>
+          </div>
           <table class="table table-sm align-middle mb-2">
             <thead>
               <tr>

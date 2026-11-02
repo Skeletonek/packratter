@@ -34,6 +34,9 @@ startup log (see step 3).
 
 The full variable list — upload limits, per-repo quotas, session lifetimes, per-ecosystem
 `DISABLE_*` switches — is documented in [`.env.example`](../.env.example) in the repository.
+Single sign-on (OIDC) is enabled with the `SSO_*` variables; once it is edited in the
+Settings → Authentication page, the stored configuration wins and later `.env` changes
+have no effect.
 
 ## 2. Compose file
 

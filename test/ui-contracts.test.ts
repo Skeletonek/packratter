@@ -41,4 +41,17 @@ describe('UI contracts', () => {
     expect(loginPage).toContain('/api/v1/auth/sso/status');
     expect(loginPage).toContain('/api/v1/auth/sso/start');
   });
+
+  it('nests users under the settings page and keeps old links redirecting', () => {
+    const menu = readFileSync(join(uiSrc, 'lib/UserMenu.svelte'), 'utf8');
+    expect(menu).toContain("resolve('/settings')");
+    expect(menu).not.toContain("resolve('/users')");
+
+    const redirectPage = readFileSync(join(uiSrc, 'routes/users/+page.ts'), 'utf8');
+    expect(redirectPage).toContain("resolve('/settings/users')");
+
+    // the settings shell is admin-gated
+    const layout = readFileSync(join(uiSrc, 'routes/settings/+layout.svelte'), 'utf8');
+    expect(layout).toContain("role === 'admin'");
+  });
 });

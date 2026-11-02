@@ -14,11 +14,13 @@
 - Setup snippets contain only repository setup commands.
 - SSO sign-in added as an additional login method.
 - Repositories gained per-user access: maintainer can publish, viewer can browse.
-- An OIDC claim can grant admin rights on SSO sign-in.
+- A settings page adds an environment overview, user management, OIDC configuration
+  and a GPG key overview.
 
 ### Fixes
 
 - Flatpak packages show their version and architecture.
+- The error dialog has an opaque background again.
 
 ## 0.6.1 — 2026-11-01
 

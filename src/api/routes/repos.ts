@@ -52,7 +52,8 @@ const createRepoSchema = z.object({
 });
 
 const patchRepoSchema = z.object({
-  branchMode: z.enum(['env', 'bundle']),
+  branchMode: z.enum(['env', 'bundle']).optional(),
+  allUsers: z.boolean().optional(),
 });
 
 const memberSchema = z.object({
@@ -167,14 +168,32 @@ const reposRoutes: FastifyPluginAsync = async (fastify) => {
     const { repo } = request.params as { repo: string };
     const body = patchRepoSchema.parse(request.body);
     const row = resolveRepo(repo);
-    if (row.type !== 'flatpak') {
-      throw new AppError('BAD_REQUEST', 'branch naming only applies to flatpak repositories', 400);
+
+    const patch: Partial<typeof schema.repos.$inferInsert> = {};
+    if (body.branchMode !== undefined) {
+      if (row.type !== 'flatpak') {
+        throw new AppError(
+          'BAD_REQUEST',
+          'branch naming only applies to flatpak repositories',
+          400,
+        );
+      }
+      patch.branchMode = body.branchMode;
     }
-    db.update(schema.repos)
-      .set({ branchMode: body.branchMode })
-      .where(eq(schema.repos.id, row.id))
-      .run();
-    return { success: true, data: { branchMode: body.branchMode } };
+    if (body.allUsers !== undefined) {
+      patch.allUsers = body.allUsers;
+    }
+    if (Object.keys(patch).length === 0) {
+      throw new AppError('BAD_REQUEST', 'nothing to update', 400);
+    }
+    db.update(schema.repos).set(patch).where(eq(schema.repos.id, row.id)).run();
+    return {
+      success: true,
+      data: {
+        ...(body.branchMode !== undefined ? { branchMode: body.branchMode } : {}),
+        ...(body.allUsers !== undefined ? { allUsers: body.allUsers } : {}),
+      },
+    };
   });
 
   fastify.get('/:repo/:env/packages', async (request) => {

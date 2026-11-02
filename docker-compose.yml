@@ -8,7 +8,3 @@ services:
       - ./data:/data
     env_file:
       - .env
-    environment:
-      - NODE_ENV=production
-      - DATA_DIR=/data
-      - GPG_ROOT=/data/keys/gnupg

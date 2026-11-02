@@ -31,8 +31,8 @@
           <i class="bi bi-person me-1"></i>Account
         </a>
         {#if $user.role === 'admin'}
-          <a class="dropdown-item" href={resolve('/users')} on:click={() => (open = false)}>
-            <i class="bi bi-people me-1"></i>Users
+          <a class="dropdown-item" href={resolve('/settings')} on:click={() => (open = false)}>
+            <i class="bi bi-gear me-1"></i>Settings
           </a>
         {/if}
         <hr class="dropdown-divider" />
