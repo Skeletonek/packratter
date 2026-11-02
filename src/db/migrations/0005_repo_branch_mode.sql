@@ -1,0 +1,1 @@
+ALTER TABLE repos ADD COLUMN branch_mode TEXT NOT NULL DEFAULT 'env';

@@ -97,7 +97,11 @@ echo "${pkgname} test package" > %{buildroot}/usr/share/doc/${pkgname}/README
   return bytes;
 }
 
-export function buildFlatpakBundle(appId = 'com.test.testpackage', branch = 'master'): Buffer {
+export function buildFlatpakBundle(
+  appId = 'com.test.testpackage',
+  branch = 'master',
+  version = '2.7.3',
+): Buffer {
   const base = mkdtempSync(join(tmpdir(), 'packrat-flatpak-'));
   const buildDir = join(base, 'build');
   const repoDir = join(base, 'repo');
@@ -105,6 +109,21 @@ export function buildFlatpakBundle(appId = 'com.test.testpackage', branch = 'mas
   writeFileSync(
     join(buildDir, 'metadata'),
     `[Application]\nname=${appId}\nruntime=org.test.Platform/x86_64/master\nsdk=org.test.Sdk/x86_64/master\ncommand=${appId}\n`,
+  );
+  const metainfoDir = join(buildDir, 'files', 'share', 'metainfo');
+  mkdirSync(metainfoDir, { recursive: true });
+  writeFileSync(
+    join(metainfoDir, `${appId}.metainfo.xml`),
+    `<?xml version="1.0" encoding="UTF-8"?>
+<component type="application">
+  <id>${appId}</id>
+  <name>${appId}</name>
+  <summary>Test app used by packratter tests.</summary>
+  <releases>
+    <release version="${version}" date="2026-11-01"/>
+  </releases>
+</component>
+`,
   );
   writeFileSync(join(buildDir, 'files', 'bin', appId), '#!/bin/sh\necho hi\n');
   chmodSync(join(buildDir, 'files', 'bin', appId), 0o755);

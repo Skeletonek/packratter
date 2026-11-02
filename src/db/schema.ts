@@ -4,6 +4,9 @@ export const repos = sqliteTable('repos', {
   id: text().primaryKey(),
   name: text().notNull().unique(),
   type: text().notNull(),
+  // flatpak only: where bundle refs come from — 'env' names the branch after
+  // the environment, 'bundle' keeps whatever branch the bundle was built with.
+  branchMode: text('branch_mode').notNull().default('env'),
   createdAt: integer('created_at').notNull(),
 });
 

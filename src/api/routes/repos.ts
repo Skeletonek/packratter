@@ -13,6 +13,7 @@ import { assertTypeAvailable, scanToolchain } from '../../lib/toolchain.js';
 import { ensureRepoEnvDir } from '../../lib/paths.js';
 import { generateRepoKey, repoFingerprint, gpgHome } from '../../gpg/index.js';
 import { formats, type RepoType } from '../../formats/index.js';
+import { sortPackages } from '../../lib/packageSort.js';
 import { config } from '../../config.js';
 import { requireAdmin } from './auth.js';
 
@@ -47,6 +48,10 @@ const createRepoSchema = z.object({
     .max(32)
     .regex(/^[a-z0-9-]+$/)
     .optional(),
+});
+
+const patchRepoSchema = z.object({
+  branchMode: z.enum(['env', 'bundle']),
 });
 
 const reposRoutes: FastifyPluginAsync = async (fastify) => {
@@ -130,6 +135,21 @@ const reposRoutes: FastifyPluginAsync = async (fastify) => {
     return { success: true, data: { ...row, createdAt: row.createdAt * 1000, envs } };
   });
 
+  fastify.patch('/:repo', async (request) => {
+    requireAdmin(request);
+    const { repo } = request.params as { repo: string };
+    const body = patchRepoSchema.parse(request.body);
+    const row = resolveRepo(repo);
+    if (row.type !== 'flatpak') {
+      throw new AppError('BAD_REQUEST', 'branch naming only applies to flatpak repositories', 400);
+    }
+    db.update(schema.repos)
+      .set({ branchMode: body.branchMode })
+      .where(eq(schema.repos.id, row.id))
+      .run();
+    return { success: true, data: { branchMode: body.branchMode } };
+  });
+
   fastify.get('/:repo/:env/packages', async (request) => {
     const { repo, env } = request.params as { repo: string; env: string };
     const repoRow = resolveRepo(repo);
@@ -148,7 +168,8 @@ const reposRoutes: FastifyPluginAsync = async (fastify) => {
     }
     const all = query.all();
     const total = all.length;
-    const data = all.slice((pageNum - 1) * pageSize, pageNum * pageSize);
+    const sorted = sortPackages(all, repoRow.type as RepoType);
+    const data = sorted.slice((pageNum - 1) * pageSize, pageNum * pageSize);
 
     return { success: true, data, pagination: { page: pageNum, pageSize, total } };
   });

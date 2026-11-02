@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.7.0 — 2026-11-02
+
+### Changes
+
+- Flatpak packages are published under a branch named after their environment (e.g. `app/<app-id>/<arch>/<env>`) instead of the branch the bundle was built with.
+- Flatpak repositories can switch branch naming in settings — environment name or each bundle's original branch.
+- Renaming a flatpak repository environment now moves already-published packages to the new branch name.
+- Package lists are sorted by name, then by version (highest first), then by architecture.
+- Package lists gained a search box that filters by filename.
+- The jobs list shows when each job was created.
+
+### Fixes
+
+- Flatpak repositories now show the package version and architecture of their packages (previously dashes).
+
 ## 0.6.1 — 2026-11-01
 
 ### Changes

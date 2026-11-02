@@ -126,6 +126,20 @@ describe.skipIf(process.env.RUN_FULL_TESTS !== '1')('Flatpak repos', () => {
     expect(summarySigRes.statusCode).toBe(200);
   });
 
+  it('lists the package with version, arch and an env-named ref', async () => {
+    const res = await server.inject({
+      method: 'GET',
+      url: `/api/v1/repos/${flatpakRepoName}/stable/packages`,
+      headers: auth(),
+    });
+
+    expect(res.statusCode).toBe(200);
+    const row = res.json().data[0];
+    expect(row.ref).toBe('app/com.test.testpackage/x86_64/stable');
+    expect(row.version).toBe('2.7.3');
+    expect(row.arch).toBe('x86_64');
+  });
+
   it('promotes a bundle between envs', async () => {
     const envRes = await server.inject({
       method: 'POST',
@@ -146,6 +160,14 @@ describe.skipIf(process.env.RUN_FULL_TESTS !== '1')('Flatpak repos', () => {
     const job = await waitForJob(server, auth(), res.json().data.jobId);
     expect(job.status).toBe('done');
 
+    const testingPkgs = await server.inject({
+      method: 'GET',
+      url: `/api/v1/repos/${flatpakRepoName}/testing/packages`,
+      headers: auth(),
+    });
+    expect(testingPkgs.statusCode).toBe(200);
+    expect(testingPkgs.json().data[0].ref).toBe('app/com.test.testpackage/x86_64/testing');
+
     const summary = await server.inject({
       method: 'GET',
       url: `/r/${flatpakRepoName}/testing/flatpak/ostree/summary`,
@@ -157,5 +179,130 @@ describe.skipIf(process.env.RUN_FULL_TESTS !== '1')('Flatpak repos', () => {
       url: `/r/${flatpakRepoName}/testing/flatpak/ostree/summary.sig`,
     });
     expect(sig.statusCode).toBe(200);
+  });
+
+  it('keeps bundle branch after switching the repo to bundle mode', async () => {
+    const patchRes = await server.inject({
+      method: 'PATCH',
+      url: `/api/v1/repos/${flatpakRepoName}`,
+      headers: { ...auth(), 'Content-Type': 'application/json' },
+      payload: { branchMode: 'bundle' },
+    });
+    expect(patchRes.statusCode).toBe(200);
+    expect(patchRes.json().data.branchMode).toBe('bundle');
+
+    const uploadRes = await server.inject({
+      method: 'PUT',
+      url: `/api/v1/repos/${flatpakRepoName}/stable/packages`,
+      headers: { ...auth(), 'Content-Type': 'application/octet-stream' },
+      payload: buildFlatpakBundle(),
+    });
+    expect(uploadRes.statusCode).toBe(202);
+    const job = await waitForJob(server, auth(), uploadRes.json().data.jobId);
+    expect(job.status).toBe('done');
+
+    const res = await server.inject({
+      method: 'GET',
+      url: `/api/v1/repos/${flatpakRepoName}/stable/packages`,
+      headers: auth(),
+    });
+    expect(res.statusCode).toBe(200);
+    const refs = res.json().data.map((row: { ref: string }) => row.ref);
+    expect(refs).toContain('app/com.test.testpackage/x86_64/master');
+    expect(refs).toContain('app/com.test.testpackage/x86_64/stable');
+  });
+
+  it('rejects invalid branch mode values and non-flatpak repos', async () => {
+    const invalidRes = await server.inject({
+      method: 'PATCH',
+      url: `/api/v1/repos/${flatpakRepoName}`,
+      headers: { ...auth(), 'Content-Type': 'application/json' },
+      payload: { branchMode: 'weird' },
+    });
+    expect(invalidRes.statusCode).toBe(400);
+
+    const nameRes = await server.inject({
+      method: 'POST',
+      url: `/api/v1/repos`,
+      headers: auth(),
+      payload: { name: 'flatpak-settings-repo', type: 'pacman' },
+    });
+    expect(nameRes.statusCode).toBe(201);
+    const patchRes = await server.inject({
+      method: 'PATCH',
+      url: `/api/v1/repos/flatpak-settings-repo`,
+      headers: { ...auth(), 'Content-Type': 'application/json' },
+      payload: { branchMode: 'env' },
+    });
+    expect(patchRes.statusCode).toBe(400);
+    expect(patchRes.json().error.code).toBe('BAD_REQUEST');
+  });
+
+  it('promotes under the destination branch mode', async () => {
+    const patchRes = await server.inject({
+      method: 'PATCH',
+      url: `/api/v1/repos/${flatpakRepoName}`,
+      headers: { ...auth(), 'Content-Type': 'application/json' },
+      payload: { branchMode: 'env' },
+    });
+    expect(patchRes.statusCode).toBe(200);
+
+    const uploadRes = await server.inject({
+      method: 'PUT',
+      url: `/api/v1/repos/${flatpakRepoName}/stable/packages`,
+      headers: { ...auth(), 'Content-Type': 'application/octet-stream' },
+      payload: buildFlatpakBundle(),
+    });
+    expect(uploadRes.statusCode).toBe(202);
+    const uploadJob = await waitForJob(server, auth(), uploadRes.json().data.jobId);
+    expect(uploadJob.status).toBe('done');
+
+    const promoteRes = await server.inject({
+      method: 'POST',
+      url: `/api/v1/repos/${flatpakRepoName}/promote`,
+      headers: auth(),
+      payload: { from: 'stable', to: 'testing' },
+    });
+    expect(promoteRes.statusCode).toBe(202);
+    const job = await waitForJob(server, auth(), promoteRes.json().data.jobId);
+    expect(job.status).toBe('done');
+
+    // Source bundle used master, but the env-mode destination renames it.
+    const res = await server.inject({
+      method: 'GET',
+      url: `/api/v1/repos/${flatpakRepoName}/testing/packages`,
+      headers: auth(),
+    });
+    expect(res.statusCode).toBe(200);
+    const refs = res.json().data.map((row: { ref: string }) => row.ref);
+    expect(refs).toContain('app/com.test.testpackage/x86_64/testing');
+  });
+
+  it('re-points ostree refs when the environment is renamed', async () => {
+    const renameRes = await server.inject({
+      method: 'PATCH',
+      url: `/api/v1/repos/${flatpakRepoName}/envs/stable`,
+      headers: { ...auth(), 'Content-Type': 'application/json' },
+      payload: { name: 'prod' },
+    });
+    expect(renameRes.statusCode).toBe(200);
+    expect(typeof renameRes.json().data.jobId).toBe('string');
+    await waitForJob(server, auth(), renameRes.json().data.jobId);
+
+    const res = await server.inject({
+      method: 'GET',
+      url: `/api/v1/repos/${flatpakRepoName}/prod/packages`,
+      headers: auth(),
+    });
+    expect(res.statusCode).toBe(200);
+    const refs = res.json().data.map((row: { ref: string }) => row.ref);
+    expect(refs).toContain('app/com.test.testpackage/x86_64/master');
+    expect(refs.some((ref: string) => ref.endsWith('/stable'))).toBe(false);
+
+    const summary = await server.inject({
+      method: 'GET',
+      url: `/r/${flatpakRepoName}/prod/flatpak/ostree/summary`,
+    });
+    expect(summary.statusCode).toBe(200);
   });
 });

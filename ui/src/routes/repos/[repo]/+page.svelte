@@ -26,6 +26,12 @@
   let envs: { id: string; name: string }[] = [];
   let activeEnv = 'stable';
   let packages: Package[] = [];
+  let pkgCount = 0;
+  let search = '';
+  let searchTimer: ReturnType<typeof setTimeout> | undefined;
+  let branchMode = 'env';
+  let savedBranchMode = 'env';
+  let savingBranchMode = false;
   let file: FileList | null = null;
   let uploading = false;
   let message = '';
@@ -36,9 +42,10 @@
   let newEnvName = '';
 
   async function load() {
+    const query = search ? `?q=${encodeURIComponent(search)}` : '';
     const [repoRes, pkgRes, snippetRes] = await Promise.all([
       fetch(`/api/v1/repos/${repoName}`),
-      fetch(`/api/v1/repos/${repoName}/${activeEnv}/packages`),
+      fetch(`/api/v1/repos/${repoName}/${activeEnv}/packages${query}`),
       fetch(`/api/v1/repos/${repoName}/${activeEnv}/setup-snippet`),
     ]);
     const repoJson = await repoRes.json();
@@ -48,14 +55,47 @@
     if (!pkgJson.success) throw new Error(pkgJson.error?.message ?? 'package load failed');
     repoType = repoJson.data.type;
     envs = repoJson.data.envs;
+    branchMode = repoJson.data.branchMode ?? 'env';
+    savedBranchMode = branchMode;
     packages = pkgJson.data;
+    pkgCount = pkgJson.pagination?.total ?? packages.length;
     snippet = snippetJson.success ? snippetJson.data : '';
   }
 
   function switchEnv(name: string) {
     activeEnv = name;
     message = '';
+    search = '';
+    clearTimeout(searchTimer);
     load().catch((e) => showError('LOAD_FAILED', String(e)));
+  }
+
+  function onSearchInput() {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(
+      () => load().catch((e) => showError('LOAD_FAILED', String(e))),
+      250,
+    );
+  }
+
+  async function saveBranchMode() {
+    savingBranchMode = true;
+    try {
+      const res = await fetch(`/api/v1/repos/${repoName}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ branchMode }),
+      });
+      const json = await res.json();
+      if (!json.success) {
+        handleApiError('PATCH_REPO_FAILED', json);
+        return;
+      }
+      showNotice('Flatpak branch naming updated; new uploads use the selected setting.');
+      await load();
+    } finally {
+      savingBranchMode = false;
+    }
   }
 
   async function renameEnv(oldName: string) {
@@ -219,7 +259,7 @@
   <ul class="nav nav-tabs mb-3">
     <li class="nav-item">
       <button class="nav-link" class:active={activeTab === 'packages'} on:click={() => (activeTab = 'packages')}>
-        Packages {#if packages.length}<span class="badge text-bg-secondary ms-1">{packages.length}</span>{/if}
+        Packages {#if pkgCount}<span class="badge text-bg-secondary ms-1">{pkgCount}</span>{/if}
       </button>
     </li>
     <li class="nav-item">
@@ -301,7 +341,17 @@
 
     <div class="card shadow-sm">
       <div class="card-body">
-        <h5 class="card-title">Packages in {activeEnv}</h5>
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+          <h5 class="card-title mb-0">Packages in {activeEnv}</h5>
+          <input
+            class="form-control form-control-sm w-auto ms-auto"
+            type="search"
+            placeholder="Filter by filename…"
+            aria-label="Filter packages by filename"
+            bind:value={search}
+            on:input={onSearchInput}
+          />
+        </div>
         {#if packages.length > 0}
           <div class="table-responsive">
             <table class="table table-striped table-hover align-middle">
@@ -336,7 +386,9 @@
             </table>
           </div>
         {:else}
-          <p class="text-body-secondary mb-0">No packages uploaded yet.</p>
+          <p class="text-body-secondary mb-0">
+            {search ? 'No packages match the filter.' : 'No packages uploaded yet.'}
+          </p>
         {/if}
       </div>
     </div>
@@ -384,6 +436,29 @@
   {/if}
 
   {#if activeTab === 'settings'}
+    {#if repoType === 'flatpak'}
+      <div class="card shadow-sm mb-4">
+        <div class="card-body">
+          <h5 class="card-title">Flatpak branch naming</h5>
+          <select class="form-select w-auto" bind:value={branchMode} disabled={savingBranchMode} aria-label="Flatpak branch naming">
+            <option value="env">Name branches after the environment</option>
+            <option value="bundle">Keep the bundle's original branch</option>
+          </select>
+          <p class="small text-body-secondary mt-2 mb-2">
+            Packages already in the repo keep their current branch; after switching, the same app
+            can appear under two branch names until the old packages are re-uploaded or removed.
+          </p>
+          <button
+            type="button"
+            class="btn btn-sm btn-primary"
+            disabled={savingBranchMode || branchMode === savedBranchMode}
+            on:click={() => void saveBranchMode()}
+          >
+            Save
+          </button>
+        </div>
+      </div>
+    {/if}
     <div class="card shadow-sm mb-4">
       <div class="card-body">
         <h5 class="card-title">Environment: {activeEnv}</h5>

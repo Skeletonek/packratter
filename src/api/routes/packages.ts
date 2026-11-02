@@ -59,7 +59,7 @@ const packagesRoutes: FastifyPluginAsync = async (fastify) => {
 
       assertTypeAvailable(repoRow.type as RepoType, await scanToolchain());
 
-      const envRow = resolveEnv(repoRow.id, env);
+      const envRow = { ...resolveEnv(repoRow.id, env), branchMode: repoRow.branchMode };
 
       const body = request.body as Buffer;
       if (!Buffer.isBuffer(body) || body.length === 0) {
@@ -148,8 +148,8 @@ const packagesRoutes: FastifyPluginAsync = async (fastify) => {
       throw new AppError('BAD_REQUEST', 'from and to must be different envs', 400);
     }
     const repoRow = resolveRepo(repo);
-    const fromEnv = resolveEnv(repoRow.id, body.from);
-    const toEnv = resolveEnv(repoRow.id, body.to);
+    const fromEnv = { ...resolveEnv(repoRow.id, body.from), branchMode: repoRow.branchMode };
+    const toEnv = { ...resolveEnv(repoRow.id, body.to), branchMode: repoRow.branchMode };
 
     let fromPkgs = db
       .select()

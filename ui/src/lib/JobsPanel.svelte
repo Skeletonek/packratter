@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
   import { handleApiError } from '$lib/api.js';
+  import { formatDate } from '$lib/format.js';
 
   export let repoName: string;
 
@@ -62,7 +63,10 @@
         {#each jobs as job}
           <div class="list-group-item">
             <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
-              <code class="small text-truncate" style="max-width: 16rem;">{job.id}</code>
+              <div class="d-flex flex-wrap align-items-center gap-2">
+                <code class="small text-truncate" style="max-width: 16rem;">{job.id}</code>
+                <span class="small text-body-secondary text-nowrap">{formatDate(job.createdAt)}</span>
+              </div>
               <div class="d-flex align-items-center gap-2">
                 <span
                   class="badge"

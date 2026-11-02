@@ -12,6 +12,8 @@ import { ensureRepoEnvDir } from '../../lib/paths.js';
 import { formats, type RepoType } from '../../formats/index.js';
 import { guardNoRunningJobs } from './repos.js';
 import { requireAdmin } from './auth.js';
+import { enqueueRebuild } from '../../jobs/queue.js';
+import { sortPackages } from '../../lib/packageSort.js';
 
 const createEnvSchema = z.object({
   name: z
@@ -82,11 +84,26 @@ const envsRoutes: FastifyPluginAsync = async (fastify) => {
         throw new AppError('CONFLICT', 'env name already exists', 409);
       }
 
-      // deb keeps its metadata under dists/<env-name>; move it so existing URLs
-      // keep resolving instead of leaving stale metadata behind.
-      formats[repoRow.type as RepoType].renameEnv?.(envRow, body.name);
+      // renames may re-point stored package refs; the rebuild afterwards
+      // regenerates the files that embed the env name (flatpak summary, deb
+      // Release suite).
+      const renames =
+        formats[repoRow.type as RepoType].renameEnv?.(
+          { ...envRow, branchMode: repoRow.branchMode },
+          body.name,
+        ) ?? [];
 
       db.update(schema.envs).set({ name: body.name }).where(eq(schema.envs.id, envRow.id)).run();
+
+      for (const { oldRef, newRef } of renames) {
+        db.update(schema.packages)
+          .set({ ref: newRef })
+          .where(and(eq(schema.packages.envId, envRow.id), eq(schema.packages.ref, oldRef)))
+          .run();
+      }
+
+      const jobId = await enqueueRebuild(repoRow.id, envRow.id);
+      return { success: true, data: { id: envRow.id, name: body.name, jobId } };
     }
     return { success: true, data: { id: envRow.id, name: body.name } };
   });
@@ -118,12 +135,21 @@ const envsRoutes: FastifyPluginAsync = async (fastify) => {
     return {
       success: true,
       data: {
-        onlyInFrom: fromPkgs.filter((p) => !toByFilename.has(p.filename)),
-        onlyInTo: toPkgs.filter((p) => !fromByFilename.has(p.filename)),
-        different: fromPkgs.filter((p) => {
-          const other = toByFilename.get(p.filename);
-          return other !== undefined && other.sha256 !== p.sha256;
-        }),
+        onlyInFrom: sortPackages(
+          fromPkgs.filter((p) => !toByFilename.has(p.filename)),
+          repoRow.type as RepoType,
+        ),
+        onlyInTo: sortPackages(
+          toPkgs.filter((p) => !fromByFilename.has(p.filename)),
+          repoRow.type as RepoType,
+        ),
+        different: sortPackages(
+          fromPkgs.filter((p) => {
+            const other = toByFilename.get(p.filename);
+            return other !== undefined && other.sha256 !== p.sha256;
+          }),
+          repoRow.type as RepoType,
+        ),
       },
     };
   });

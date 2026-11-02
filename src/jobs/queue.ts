@@ -47,7 +47,7 @@ export async function enqueueRebuild(repoId: string, envId: string): Promise<str
     try {
       const repo = db.select().from(schema.repos).where(eq(schema.repos.id, repoId)).all()[0];
       if (!repo) throw new Error('repo not found');
-      await formats[repo.type as RepoType].rebuild(env, log);
+      await formats[repo.type as RepoType].rebuild({ ...env, branchMode: repo.branchMode }, log);
       db.update(schema.packages)
         .set({ status: 'ready' })
         .where(eq(schema.packages.envId, env.id))

@@ -2,6 +2,8 @@ export interface EnvRef {
   id: string;
   repoId: string;
   name: string;
+  /** flatpak only: 'env' (branch named after the environment, default) or 'bundle'. */
+  branchMode?: string;
 }
 
 export interface PackageMeta {
@@ -30,6 +32,15 @@ export interface Format {
   rebuild(env: EnvRef, log: (line: string) => void): Promise<void>;
   serveHeaders(path: string): Record<string, string>;
   setupSnippet(repoName: string, baseUrl: string, envName: string, fingerprint: string): string;
-  /** Only formats that store data under a name-dependent path implement this. */
-  renameEnv?(env: EnvRef, newName: string): void;
+  /**
+   * Only formats that store data under a name-dependent path implement this.
+   * May return package-ref renames the caller must apply to packages.ref.
+   */
+  renameEnv?(env: EnvRef, newName: string): RefRename[] | void;
+}
+
+/** A stored package ref that a renameEnv moved to a new value. */
+export interface RefRename {
+  oldRef: string;
+  newRef: string;
 }
