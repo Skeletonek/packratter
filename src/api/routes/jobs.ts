@@ -1,10 +1,11 @@
 import { FastifyPluginAsync } from 'fastify';
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '../../db/index.js';
 import * as schema from '../../db/schema.js';
 import { AppError } from '../../errors.js';
 import { resolveEnv, resolveRepo } from '../../lib/repos.js';
 import { enqueueRebuild } from '../../jobs/queue.js';
+import { repoRole, requireRepoRole, visibleRepoIds } from '../../auth/access.js';
 
 const jobsRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get('/', async (request) => {
@@ -21,14 +22,22 @@ const jobsRoutes: FastifyPluginAsync = async (fastify) => {
     const pageSize = 50;
 
     const conditions = [];
+    const allowed = visibleRepoIds(request.user!);
     if (repo) {
       const repoRow = resolveRepo(repo);
+      requireRepoRole(request.user!, repoRow.id, 'viewer');
       conditions.push(eq(schema.jobs.repoId, repoRow.id));
       if (env) {
         conditions.push(eq(schema.jobs.envId, resolveEnv(repoRow.id, env).id));
       }
     } else if (env) {
       throw new AppError('BAD_REQUEST', 'env filter requires a repo filter', 400);
+    } else if (allowed !== null) {
+      // Jobs of ungranted (and deleted) repos stay invisible.
+      if (allowed.length === 0) {
+        return { success: true, data: [], pagination: { page: pageNum, pageSize, total: 0 } };
+      }
+      conditions.push(inArray(schema.jobs.repoId, allowed));
     }
 
     const all = db
@@ -47,6 +56,10 @@ const jobsRoutes: FastifyPluginAsync = async (fastify) => {
     const { id } = request.params as { id: string };
     const row = db.select().from(schema.jobs).where(eq(schema.jobs.id, id)).all()[0];
     if (!row) throw new AppError('NOT_FOUND', 'job not found', 404);
+    // Orphaned jobs (their repo was deleted) are admin-only.
+    if (request.user!.role !== 'admin' && (!row.repoId || !repoRole(request.user!, row.repoId))) {
+      throw new AppError('NOT_FOUND', 'job not found', 404);
+    }
     return { success: true, data: row };
   });
 
@@ -60,6 +73,7 @@ const jobsRoutes: FastifyPluginAsync = async (fastify) => {
     if (!job.repoId || !job.envId) {
       throw new AppError('BAD_REQUEST', 'job is not retryable', 400);
     }
+    requireRepoRole(request.user!, job.repoId, 'maintainer');
     const repoRow = db.select().from(schema.repos).where(eq(schema.repos.id, job.repoId)).all()[0];
     const envRow = db.select().from(schema.envs).where(eq(schema.envs.id, job.envId)).all()[0];
     if (!repoRow || !envRow) {

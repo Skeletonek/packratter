@@ -85,6 +85,11 @@
     await load();
   }
 
+  async function handBackRole(target: ManagedUser) {
+    await updateUser(target, { roleManaged: false });
+    await load();
+  }
+
   async function resetPassword(target: ManagedUser) {
     if (!confirm(`Reset the password of "${target.login}"? An old one won't work anymore.`)) return;
     const res = await fetch(`/api/v1/users/${target.id}/password`, { method: 'POST' });
@@ -136,6 +141,9 @@
                   bind:value={u.login}
                   on:change={() => void updateUser(u, { login: u.login })}
                 />
+                {#if u.hasPassword === false}
+                  <span class="badge text-bg-info ms-1">SSO</span>
+                {/if}
               </td>
               <td style="max-width: 10rem;">
                 <input
@@ -162,6 +170,16 @@
                   <option value="user">user</option>
                   <option value="admin">admin</option>
                 </select>
+                {#if u.roleManaged}
+                  <button
+                    type="button"
+                    class="btn btn-link btn-sm p-0 small text-body-secondary d-block text-start"
+                    title="Hand this role back to SSO claim management"
+                    on:click={() => void handBackRole(u)}
+                  >
+                    manual role — hand back to SSO
+                  </button>
+                {/if}
               </td>
               <td class="small">{new Date(u.createdAt).toLocaleDateString()}</td>
               <td class="text-end">

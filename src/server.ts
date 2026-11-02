@@ -10,6 +10,7 @@ import { AppError } from './errors.js';
 import { errorPage } from './lib/errorPage.js';
 import { registerAuth } from './api/plugins/auth.js';
 import authRoutes from './api/routes/auth.js';
+import ssoRoutes from './api/routes/sso.js';
 import reposRoutes from './api/routes/repos.js';
 import packagesRoutes from './api/routes/packages.js';
 import envsRoutes from './api/routes/envs.js';
@@ -139,6 +140,7 @@ export function buildServer() {
   registerAuth(app);
 
   void app.register(authRoutes, { prefix: '/api/v1' });
+  void app.register(ssoRoutes, { prefix: '/api/v1' });
   void app.register(toolchainRoutes, { prefix: '/api/v1/toolchain' });
   void app.register(reposRoutes, { prefix: '/api/v1/repos' });
   void app.register(packagesRoutes, { prefix: '/api/v1/repos' });

@@ -6,9 +6,15 @@ import { verifyToken } from '../../auth/tokens.js';
 import { SESSION_COOKIE, sessionUserId } from '../../auth/sessions.js';
 import { AppError } from '../../errors.js';
 
-// Login and logout need to work without a valid session: logout must still be
-// able to clear a too-old cookie.
-const PUBLIC_API_PATHS = new Set(['/api/v1/auth/login', '/api/v1/auth/logout']);
+// Login, logout and the SSO flow need to work without a valid session: logout
+// must still be able to clear a too-old cookie and SSO is how one gets in.
+const PUBLIC_API_PATHS = new Set([
+  '/api/v1/auth/login',
+  '/api/v1/auth/logout',
+  '/api/v1/auth/sso/status',
+  '/api/v1/auth/sso/start',
+  '/api/v1/auth/sso/callback',
+]);
 
 const unauthorized = (message: string) => new AppError('UNAUTHORIZED', message, 401);
 

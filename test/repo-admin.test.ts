@@ -16,6 +16,7 @@ let token = '';
 let userCookie = '';
 let server: FastifyInstance;
 let repoName = '';
+let teamuserId = '';
 
 interface CookieJar {
   name: string;
@@ -49,6 +50,7 @@ beforeAll(async () => {
     headers: bearer(),
     payload: { login: 'teamuser', password: 'teamuserpass' },
   });
+  teamuserId = db.select().from(schema.users).where(eq(schema.users.login, 'teamuser')).all()[0].id;
   const login = await server.inject({
     method: 'POST',
     url: '/api/v1/auth/login',
@@ -82,6 +84,11 @@ describe('repo creation env', () => {
     expect(res.statusCode).toBe(201);
     expect(res.json().data.envs).toEqual([{ id: expect.any(String), name: 'products' }]);
     repoName = 'env-choice-repo';
+    // teamuser browses this repo as a viewer: enough to see it in the list,
+    // not enough for maintainer verbs.
+    db.insert(schema.repoMembers)
+      .values({ repoId: res.json().data.id, userId: teamuserId, role: 'viewer' })
+      .run();
   });
 
   it('falls back to stable when the name is omitted', async () => {
@@ -119,7 +126,7 @@ describe('repo list', () => {
 });
 
 describe('env rename', () => {
-  it('renames and rejects permission-less renames and duplicates', async () => {
+  it('renames and rejects viewer renames and duplicates', async () => {
     const ok = await server.inject({
       method: 'PATCH',
       url: `/api/v1/repos/${repoName}/envs/products`,
@@ -155,7 +162,7 @@ describe('env rename', () => {
 });
 
 describe('deletion', () => {
-  it('is admin-only for repos and envs', async () => {
+  it('is admin-only for repos and needs a maintainer grant for envs', async () => {
     const repo = await server.inject({
       method: 'DELETE',
       url: '/api/v1/repos/env-default-repo',
@@ -163,12 +170,21 @@ describe('deletion', () => {
     });
     expect(repo.statusCode).toBe(403);
 
+    // teamuser is only a viewer of env-choice-repo
     const env = await server.inject({
+      method: 'DELETE',
+      url: `/api/v1/repos/${repoName}/envs/meadow`,
+      headers: { cookie: userCookie },
+    });
+    expect(env.statusCode).toBe(403);
+
+    // envs of ungranted repos are hidden
+    const hidden = await server.inject({
       method: 'DELETE',
       url: '/api/v1/repos/env-default-repo/envs/stable',
       headers: { cookie: userCookie },
     });
-    expect(env.statusCode).toBe(403);
+    expect(hidden.statusCode).toBe(404);
   });
 
   it('refuses to delete the last environment', async () => {

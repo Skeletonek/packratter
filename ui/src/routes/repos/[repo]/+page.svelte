@@ -20,6 +20,12 @@
     createdAt: number;
   }
 
+  interface Member {
+    login: string;
+    displayName: string | null;
+    role: string;
+  }
+
   const repoName = page.params.repo;
 
   let repoType = 'pacman';
@@ -32,6 +38,10 @@
   let branchMode = 'env';
   let savedBranchMode = 'env';
   let savingBranchMode = false;
+  let yourRole = 'viewer';
+  let members: Member[] = [];
+  let newMemberLogin = '';
+  let newMemberRole = 'viewer';
   let file: FileList | null = null;
   let uploading = false;
   let message = '';
@@ -57,9 +67,59 @@
     envs = repoJson.data.envs;
     branchMode = repoJson.data.branchMode ?? 'env';
     savedBranchMode = branchMode;
+    yourRole = repoJson.data.yourRole ?? 'viewer';
     packages = pkgJson.data;
     pkgCount = pkgJson.pagination?.total ?? packages.length;
     snippet = snippetJson.success ? snippetJson.data : '';
+    await loadMembers();
+  }
+
+  // Silently empty for non-admins: the members API is admin-only and the card
+  // that shows the list is too.
+  async function loadMembers() {
+    const res = await fetch(`/api/v1/repos/${repoName}/members`);
+    const json = await res.json();
+    members = json.success ? json.data : [];
+  }
+
+  async function addMember() {
+    const res = await fetch(`/api/v1/repos/${repoName}/members`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ login: newMemberLogin.trim(), role: newMemberRole }),
+    });
+    const json = await res.json();
+    if (!json.success) {
+      handleApiError('MEMBER_REJECTED', json);
+      return;
+    }
+    newMemberLogin = '';
+    showNotice('Access granted.');
+    await loadMembers();
+  }
+
+  async function setMemberRole(member: Member, role: string) {
+    const res = await fetch(`/api/v1/repos/${repoName}/members/${member.login}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role }),
+    });
+    const json = await res.json();
+    if (!json.success) {
+      handleApiError('MEMBER_REJECTED', json);
+      await loadMembers();
+    }
+  }
+
+  async function removeMember(member: Member) {
+    if (!confirm(`Remove access of "${member.login}" from ${repoName}?`)) return;
+    const res = await fetch(`/api/v1/repos/${repoName}/members/${member.login}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) {
+      handleApiError('MEMBER_REJECTED', await res.json());
+    }
+    await loadMembers();
   }
 
   function switchEnv(name: string) {
@@ -271,7 +331,7 @@
     <li class="nav-item">
       <button class="nav-link" class:active={activeTab === 'setup'} on:click={() => (activeTab = 'setup')}>Setup</button>
     </li>
-    {#if $user?.role === 'admin'}
+    {#if yourRole === 'admin' || yourRole === 'maintainer'}
       <li class="nav-item ms-auto">
         <button class="nav-link text-body-secondary" class:active={activeTab === 'settings'} on:click={() => (activeTab = 'settings')}>
           <i class="bi bi-gear"></i> Settings
@@ -436,7 +496,7 @@
   {/if}
 
   {#if activeTab === 'settings'}
-    {#if repoType === 'flatpak'}
+    {#if yourRole === 'admin' && repoType === 'flatpak'}
       <div class="card shadow-sm mb-4">
         <div class="card-body">
           <h5 class="card-title">Flatpak branch naming</h5>
@@ -456,6 +516,78 @@
           >
             Save
           </button>
+        </div>
+      </div>
+    {/if}
+    {#if yourRole === 'admin'}
+      <div class="card shadow-sm mb-4">
+        <div class="card-body">
+          <h5 class="card-title">Access</h5>
+          <p class="small text-body-secondary mb-2">
+            Maintainers publish packages and manage environments; viewers can only browse.
+            Admins always have full access.
+          </p>
+          <table class="table table-sm align-middle mb-2">
+            <thead>
+              <tr>
+                <th class="small text-body-secondary">Login</th>
+                <th class="small text-body-secondary">Role</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {#each members as member (member.login)}
+                <tr>
+                  <td>
+                    {member.login}
+                    {#if member.displayName}<span class="small text-body-secondary ms-1">{member.displayName}</span>{/if}
+                  </td>
+                  <td>
+                    <select
+                      class="form-select form-select-sm w-auto"
+                      value={member.role}
+                      on:change={(e) =>
+                        void setMemberRole(member, (e.currentTarget as HTMLSelectElement).value)}
+                    >
+                      <option value="viewer">viewer</option>
+                      <option value="maintainer">maintainer</option>
+                    </select>
+                  </td>
+                  <td class="text-end">
+                    <button
+                      type="button"
+                      class="btn btn-sm btn-outline-danger"
+                      on:click={() => void removeMember(member)}
+                    >
+                      Remove
+                    </button>
+                  </td>
+                </tr>
+              {:else}
+                <tr><td colspan="3" class="small text-body-secondary">Nobody granted yet.</td></tr>
+              {/each}
+            </tbody>
+          </table>
+          <form
+            class="d-flex flex-wrap gap-2 align-items-center"
+            on:submit={(e) => {
+              e.preventDefault();
+              void addMember();
+            }}
+          >
+            <input
+              class="form-control form-control-sm w-auto"
+              placeholder="login"
+              aria-label="User login"
+              bind:value={newMemberLogin}
+              required
+            />
+            <select class="form-select form-select-sm w-auto" bind:value={newMemberRole} aria-label="Member role">
+              <option value="viewer">viewer</option>
+              <option value="maintainer">maintainer</option>
+            </select>
+            <button type="submit" class="btn btn-sm btn-primary">Grant access</button>
+          </form>
         </div>
       </div>
     {/if}
@@ -484,14 +616,16 @@
           </button>
         </div>
 
-        <h6 class="card-subtitle mb-1">Repository: {repoName}</h6>
-        <p class="small text-body-secondary mb-2">
-          Deleting the repository removes every environment, package and GPG key permanently.
-          Blocked while rebuild jobs are running.
-        </p>
-        <button type="button" class="btn btn-sm btn-danger" on:click={() => void deleteRepo()}>
-          <i class="bi bi-trash me-1"></i>Delete repository
-        </button>
+        {#if yourRole === 'admin'}
+          <h6 class="card-subtitle mb-1">Repository: {repoName}</h6>
+          <p class="small text-body-secondary mb-2">
+            Deleting the repository removes every environment, package and GPG key permanently.
+            Blocked while rebuild jobs are running.
+          </p>
+          <button type="button" class="btn btn-sm btn-danger" on:click={() => void deleteRepo()}>
+            <i class="bi bi-trash me-1"></i>Delete repository
+          </button>
+        {/if}
       </div>
     </div>
   {/if}

@@ -52,6 +52,8 @@ const updateUserSchema = z.object({
   email: emailSchema.optional(),
   displayName: clearableString.optional(),
   role: z.enum(['admin', 'user']).optional(),
+  /** false hands the role back to SSO claim management. */
+  roleManaged: z.boolean().optional(),
 });
 
 const forbidden = () => new AppError('FORBIDDEN', 'admin role required', 403);
@@ -78,6 +80,8 @@ function publicUser(row: typeof schema.users.$inferSelect) {
     email: row.email,
     displayName: row.displayName,
     role: row.role,
+    hasPassword: row.passHash !== null,
+    roleManaged: row.roleManaged,
     createdAt: row.createdAt * 1000,
   };
 }
@@ -89,7 +93,17 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     const body = loginSchema.parse(request.body);
     const rows = db.select().from(schema.users).where(eq(schema.users.login, body.login)).all();
     const user = rows[0];
-    if (!user || !(await verifyPassword(user.passHash, body.password))) {
+    if (!user) {
+      throw new AppError('UNAUTHORIZED', 'Wrong login or password', 401);
+    }
+    if (user.passHash === null) {
+      throw new AppError(
+        'UNAUTHORIZED',
+        'This account has no local password; use SSO sign-in',
+        401,
+      );
+    }
+    if (!(await verifyPassword(user.passHash, body.password))) {
       throw new AppError('UNAUTHORIZED', 'Wrong login or password', 401);
     }
 
@@ -148,7 +162,12 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     const body = changePasswordSchema.parse(request.body);
     const rows = db.select().from(schema.users).where(eq(schema.users.id, request.user!.id)).all();
     const user = rows[0];
-    if (!user || !(await verifyPassword(user.passHash, body.current))) {
+    if (!user || user.passHash === null) {
+      // SSO-only accounts have nothing to verify a current password against;
+      // an admin can grant one via the user management page.
+      throw new AppError('BAD_REQUEST', 'this account has no local password', 400);
+    }
+    if (!(await verifyPassword(user.passHash, body.current))) {
       throw new AppError('UNAUTHORIZED', 'Wrong current password', 401);
     }
     db.update(schema.users)
@@ -268,6 +287,12 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         throw new AppError('CONFLICT', 'cannot demote the last admin', 409);
       }
       patch.role = body.role;
+      // A hand-edited role belongs to the admin from now on: the SSO claim
+      // must never silently overwrite it on the user's next sign-in.
+      patch.roleManaged = true;
+    }
+    if (body.roleManaged !== undefined) {
+      patch.roleManaged = body.roleManaged;
     }
 
     if (Object.keys(patch).length > 0) {

@@ -1,6 +1,6 @@
 import { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
-import { eq, like, and, sql } from 'drizzle-orm';
+import { eq, inArray, like, and, sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -16,6 +16,7 @@ import { formats, type RepoType } from '../../formats/index.js';
 import { sortPackages } from '../../lib/packageSort.js';
 import { config } from '../../config.js';
 import { requireAdmin } from './auth.js';
+import { repoRole, requireRepoRole, visibleRepoIds } from '../../auth/access.js';
 
 /** Refuse destructive verbs while queued/running jobs may still write files. */
 export function guardNoRunningJobs(repoId: string, subject: string): void {
@@ -54,8 +55,18 @@ const patchRepoSchema = z.object({
   branchMode: z.enum(['env', 'bundle']),
 });
 
+const memberSchema = z.object({
+  login: z.string().min(1).max(64),
+  role: z.enum(['maintainer', 'viewer']),
+});
+
+const patchMemberSchema = z.object({
+  role: z.enum(['maintainer', 'viewer']),
+});
+
 const reposRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post('/', async (request, reply) => {
+    requireAdmin(request);
     const body = createRepoSchema.parse(request.body);
     const id = randomUUID();
     const envId = randomUUID();
@@ -82,8 +93,14 @@ const reposRoutes: FastifyPluginAsync = async (fastify) => {
     };
   });
 
-  fastify.get('/', async () => {
-    const rows = db.select().from(schema.repos).all();
+  fastify.get('/', async (request) => {
+    const allowed = visibleRepoIds(request.user!);
+    const rows =
+      allowed === null
+        ? db.select().from(schema.repos).all()
+        : allowed.length === 0
+          ? []
+          : db.select().from(schema.repos).where(inArray(schema.repos.id, allowed)).all();
     const envs = db.select().from(schema.envs).all();
     const counts = db
       .select({ envId: schema.packages.envId, count: sql<number>`count(*)` })
@@ -131,8 +148,18 @@ const reposRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get('/:repo', async (request) => {
     const { repo } = request.params as { repo: string };
     const row = resolveRepo(repo);
+    requireRepoRole(request.user!, row.id, 'viewer');
     const envs = db.select().from(schema.envs).where(eq(schema.envs.repoId, row.id)).all();
-    return { success: true, data: { ...row, createdAt: row.createdAt * 1000, envs } };
+    return {
+      success: true,
+      data: {
+        ...row,
+        createdAt: row.createdAt * 1000,
+        envs,
+        // the caller's effective role decides which settings the UI shows
+        yourRole: repoRole(request.user!, row.id),
+      },
+    };
   });
 
   fastify.patch('/:repo', async (request) => {
@@ -153,6 +180,7 @@ const reposRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get('/:repo/:env/packages', async (request) => {
     const { repo, env } = request.params as { repo: string; env: string };
     const repoRow = resolveRepo(repo);
+    requireRepoRole(request.user!, repoRow.id, 'viewer');
     const envRow = resolveEnv(repoRow.id, env);
 
     const { q, page = '1' } = request.query as { q?: string; page?: string };
@@ -177,6 +205,7 @@ const reposRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get('/:repo/:env/setup-snippet', async (request) => {
     const { repo, env } = request.params as { repo: string; env: string };
     const row = resolveRepo(repo);
+    requireRepoRole(request.user!, row.id, 'viewer');
     const fingerprint = repoFingerprint(row.id);
     if (!fingerprint) throw new AppError('NOT_FOUND', 'repo has no signing key', 404);
     const baseUrl = config.BASE_URL || `http://localhost:${config.PORT}`;
@@ -186,6 +215,94 @@ const reposRoutes: FastifyPluginAsync = async (fastify) => {
       data: snippet,
     };
   });
+
+  fastify.get('/:repo/members', async (request) => {
+    requireAdmin(request);
+    const { repo } = request.params as { repo: string };
+    const row = resolveRepo(repo);
+    return { success: true, data: listMembers(row.id) };
+  });
+
+  fastify.post('/:repo/members', async (request, reply) => {
+    requireAdmin(request);
+    const { repo } = request.params as { repo: string };
+    const body = memberSchema.parse(request.body);
+    const row = resolveRepo(repo);
+    const user = userByLogin(body.login);
+    const existing = memberRow(row.id, user.id);
+    if (existing) {
+      throw new AppError('CONFLICT', 'user already has access to this repository', 409);
+    }
+    db.insert(schema.repoMembers)
+      .values({ repoId: row.id, userId: user.id, role: body.role })
+      .run();
+    reply.status(201);
+    return { success: true, data: { login: user.login, role: body.role } };
+  });
+
+  fastify.patch('/:repo/members/:login', async (request) => {
+    requireAdmin(request);
+    const { repo, login } = request.params as { repo: string; login: string };
+    const body = patchMemberSchema.parse(request.body);
+    const row = resolveRepo(repo);
+    const user = userByLogin(login);
+    if (!memberRow(row.id, user.id)) {
+      throw new AppError('NOT_FOUND', 'member not found', 404);
+    }
+    db.update(schema.repoMembers)
+      .set({ role: body.role })
+      .where(and(eq(schema.repoMembers.repoId, row.id), eq(schema.repoMembers.userId, user.id)))
+      .run();
+    return { success: true, data: { login: user.login, role: body.role } };
+  });
+
+  fastify.delete('/:repo/members/:login', async (request) => {
+    requireAdmin(request);
+    const { repo, login } = request.params as { repo: string; login: string };
+    const row = resolveRepo(repo);
+    const user = userByLogin(login);
+    if (!memberRow(row.id, user.id)) {
+      throw new AppError('NOT_FOUND', 'member not found', 404);
+    }
+    db.delete(schema.repoMembers)
+      .where(and(eq(schema.repoMembers.repoId, row.id), eq(schema.repoMembers.userId, user.id)))
+      .run();
+    return { success: true };
+  });
 };
+
+function userByLogin(login: string) {
+  const user = db.select().from(schema.users).where(eq(schema.users.login, login)).all()[0];
+  if (!user) throw new AppError('NOT_FOUND', 'user not found', 404);
+  return user;
+}
+
+function memberRow(repoId: string, userId: string) {
+  return db
+    .select()
+    .from(schema.repoMembers)
+    .where(and(eq(schema.repoMembers.repoId, repoId), eq(schema.repoMembers.userId, userId)))
+    .all()[0];
+}
+
+function listMembers(repoId: string) {
+  const rows = db
+    .select()
+    .from(schema.repoMembers)
+    .where(eq(schema.repoMembers.repoId, repoId))
+    .all();
+  const users = new Map(
+    db
+      .select()
+      .from(schema.users)
+      .all()
+      .map((u) => [u.id, u]),
+  );
+  return rows.map((row) => ({
+    login: users.get(row.userId)?.login ?? '?',
+    displayName: users.get(row.userId)?.displayName ?? null,
+    role: row.role,
+  }));
+}
 
 export default reposRoutes;

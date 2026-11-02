@@ -58,10 +58,30 @@ export const users = sqliteTable('users', {
   login: text().notNull().unique(),
   email: text(),
   displayName: text('display_name'),
-  passHash: text('pass_hash').notNull(),
+  /** Null for SSO-only accounts: they have no local password. */
+  passHash: text('pass_hash'),
   role: text().notNull(),
+  /** OIDC subject of the linked identity; unique when present. */
+  ssoSub: text('sso_sub'),
+  /** Set once an admin hand-edits the role; the SSO claim stops managing it. */
+  roleManaged: integer('role_managed', { mode: 'boolean' }).notNull().default(false),
   createdAt: integer('created_at').notNull(),
 });
+
+export const repoMembers = sqliteTable(
+  'repo_members',
+  {
+    repoId: text('repo_id')
+      .notNull()
+      .references(() => repos.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    /** 'maintainer' | 'viewer' */
+    role: text().notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.repoId, table.userId] })],
+);
 
 export const sessions = sqliteTable('sessions', {
   // sha256 of the cookie value, never the value itself

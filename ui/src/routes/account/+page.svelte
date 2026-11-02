@@ -12,6 +12,7 @@
   let login: string = '';
   let displayName: string = '';
   let email: string = '';
+  let hasPassword = true;
   let profileSaved = false;
   let currentPassword = '';
   let nextPassword = '';
@@ -27,6 +28,7 @@
       login = me.login;
       displayName = me.displayName ?? '';
       email = me.email ?? '';
+      hasPassword = me.hasPassword !== false;
       setUser(me);
     } else {
       handleApiError('LOAD_FAILED', await res.json());
@@ -148,41 +150,43 @@
     </div>
   </div>
 
-  <div class="card mb-3">
-    <div class="card-body">
-      <h2 class="h6 text-body-secondary">Change password</h2>
-      <form
-        on:submit={(e) => {
-          e.preventDefault();
-          void changePassword();
-        }}
-      >
-        <div class="row g-2 mb-2">
-          <div class="col-12 col-sm-6">
-            <input
-              class="form-control form-control-sm"
-              type="password"
-              placeholder="Current password"
-              bind:value={currentPassword}
-              required
-            />
+  {#if hasPassword}
+    <div class="card mb-3">
+      <div class="card-body">
+        <h2 class="h6 text-body-secondary">Change password</h2>
+        <form
+          on:submit={(e) => {
+            e.preventDefault();
+            void changePassword();
+          }}
+        >
+          <div class="row g-2 mb-2">
+            <div class="col-12 col-sm-6">
+              <input
+                class="form-control form-control-sm"
+                type="password"
+                placeholder="Current password"
+                bind:value={currentPassword}
+                required
+              />
+            </div>
+            <div class="col-12 col-sm-6">
+              <input
+                class="form-control form-control-sm"
+                type="password"
+                placeholder="New password (min 8 chars)"
+                minlength="8"
+                bind:value={nextPassword}
+                required
+              />
+            </div>
           </div>
-          <div class="col-12 col-sm-6">
-            <input
-              class="form-control form-control-sm"
-              type="password"
-              placeholder="New password (min 8 chars)"
-              minlength="8"
-              bind:value={nextPassword}
-              required
-            />
-          </div>
-        </div>
-        <button type="submit" class="btn btn-sm btn-outline-primary">Change password</button>
-      </form>
-      {#if passwordSaved}<span class="form-text text-success small">Password changed.</span>{/if}
+          <button type="submit" class="btn btn-sm btn-outline-primary">Change password</button>
+        </form>
+        {#if passwordSaved}<span class="form-text text-success small">Password changed.</span>{/if}
+      </div>
     </div>
-  </div>
+  {/if}
 
   <div class="card">
     <div class="card-body">

@@ -12,6 +12,9 @@
 - The jobs list shows a date for each job.
 - Environment rename and delete moved into the settings danger zone.
 - Setup snippets contain only repository setup commands.
+- SSO sign-in added as an additional login method.
+- Repositories gained per-user access: maintainer can publish, viewer can browse.
+- An OIDC claim can grant admin rights on SSO sign-in.
 
 ### Fixes
 

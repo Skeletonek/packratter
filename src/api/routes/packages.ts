@@ -14,6 +14,7 @@ import { assertTypeAvailable, scanToolchain } from '../../lib/toolchain.js';
 import { formats, type RepoType } from '../../formats/index.js';
 import type { PackageMeta } from '../../formats/types.js';
 import { enqueueRebuild } from '../../jobs/queue.js';
+import { requireRepoRole } from '../../auth/access.js';
 
 const MAX_SIZE = config.MAX_UPLOAD_MB * 1024 * 1024;
 
@@ -55,6 +56,7 @@ const packagesRoutes: FastifyPluginAsync = async (fastify) => {
     async (request, reply) => {
       const { repo, env } = request.params as { repo: string; env: string };
       const repoRow = resolveRepo(repo);
+      requireRepoRole(request.user!, repoRow.id, 'maintainer');
       const format = formats[repoRow.type as RepoType];
 
       assertTypeAvailable(repoRow.type as RepoType, await scanToolchain());
@@ -125,6 +127,7 @@ const packagesRoutes: FastifyPluginAsync = async (fastify) => {
       filename: string;
     };
     const repoRow = resolveRepo(repo);
+    requireRepoRole(request.user!, repoRow.id, 'maintainer');
     const envRow = resolveEnv(repoRow.id, env);
 
     const pkg = db
@@ -148,6 +151,7 @@ const packagesRoutes: FastifyPluginAsync = async (fastify) => {
       throw new AppError('BAD_REQUEST', 'from and to must be different envs', 400);
     }
     const repoRow = resolveRepo(repo);
+    requireRepoRole(request.user!, repoRow.id, 'maintainer');
     const fromEnv = { ...resolveEnv(repoRow.id, body.from), branchMode: repoRow.branchMode };
     const toEnv = { ...resolveEnv(repoRow.id, body.to), branchMode: repoRow.branchMode };
 

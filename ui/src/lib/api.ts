@@ -13,6 +13,10 @@ export interface UserInfo {
   email: string | null;
   displayName: string | null;
   role: string;
+  /** false for SSO-only accounts (absent in the login response) */
+  hasPassword?: boolean;
+  /** true once an admin hand-edited the role, so SSO claims stop managing it */
+  roleManaged?: boolean;
 }
 
 // Signed-in browsers send the session cookie automatically; no token headers.

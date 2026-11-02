@@ -34,4 +34,7 @@ the web UI.
 
 ## Stages
 
-See `STAGES.md`. Current progress: **S6 complete** (local accounts & sessions: login/password, per-user API keys with admin user management, `/api/*` private behind sessions or bearer keys, `/r/*` public; SSO/OIDC is next as S7, followed by S8 ops & audit hardening).
+See `STAGES.md`. Current progress: **S7 complete** (SSO/OIDC as an additional login
+method, per-repo access grants (maintainer/viewer), claim-managed admin role — shipped
+in 0.7.0 alongside the flatpak and package-list improvements). S8 ops & audit hardening
+is next.

@@ -11,7 +11,7 @@ import { repoEnvDir } from '../../lib/paths.js';
 import { ensureRepoEnvDir } from '../../lib/paths.js';
 import { formats, type RepoType } from '../../formats/index.js';
 import { guardNoRunningJobs } from './repos.js';
-import { requireAdmin } from './auth.js';
+import { requireRepoRole } from '../../auth/access.js';
 import { enqueueRebuild } from '../../jobs/queue.js';
 import { sortPackages } from '../../lib/packageSort.js';
 
@@ -30,6 +30,7 @@ const envsRoutes: FastifyPluginAsync = async (fastify) => {
     const { repo } = request.params as { repo: string };
     const body = createEnvSchema.parse(request.body);
     const repoRow = resolveRepo(repo);
+    requireRepoRole(request.user!, repoRow.id, 'maintainer');
 
     const existing = db
       .select()
@@ -49,9 +50,9 @@ const envsRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   fastify.delete('/:repo/envs/:env', async (request) => {
-    requireAdmin(request);
     const { repo, env } = request.params as { repo: string; env: string };
     const repoRow = resolveRepo(repo);
+    requireRepoRole(request.user!, repoRow.id, 'maintainer');
     const envRow = resolveEnv(repoRow.id, env);
     guardNoRunningJobs(repoRow.id, 'environment');
 
@@ -67,10 +68,10 @@ const envsRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   fastify.patch('/:repo/envs/:env', async (request) => {
-    requireAdmin(request);
     const { repo, env } = request.params as { repo: string; env: string };
     const body = renameEnvSchema.parse(request.body);
     const repoRow = resolveRepo(repo);
+    requireRepoRole(request.user!, repoRow.id, 'maintainer');
     const envRow = resolveEnv(repoRow.id, env);
     guardNoRunningJobs(repoRow.id, 'environment');
 
@@ -115,6 +116,7 @@ const envsRoutes: FastifyPluginAsync = async (fastify) => {
       throw new AppError('BAD_REQUEST', 'from and to query parameters are required', 400);
     }
     const repoRow = resolveRepo(repo);
+    requireRepoRole(request.user!, repoRow.id, 'viewer');
     const fromEnv = resolveEnv(repoRow.id, from);
     const toEnv = resolveEnv(repoRow.id, to);
 

@@ -1,6 +1,8 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
+  import { page } from '$app/state';
+  import { onMount } from 'svelte';
   import { setUser } from '$lib/userStore.js';
 
   let login = '';
@@ -8,6 +10,21 @@
   let remember = false;
   let working = false;
   let failed = '';
+  let ssoEnabled = false;
+
+  const ssoResult = page.url.searchParams.get('sso');
+  const ssoNotice =
+    ssoResult === 'denied'
+      ? 'No account exists for this identity — ask an admin to create one.'
+      : ssoResult === 'failed'
+        ? 'SSO sign-in failed.'
+        : '';
+
+  onMount(async () => {
+    const res = await fetch('/api/v1/auth/sso/status');
+    const json = await res.json();
+    ssoEnabled = json.success === true && json.data?.enabled === true;
+  });
 
   async function submit() {
     failed = '';
@@ -38,6 +55,15 @@
         <h1 class="h4 mb-3">Sign in to Packratter</h1>
         {#if failed}
           <div class="alert alert-danger py-2 small" role="alert">{failed}</div>
+        {/if}
+        {#if ssoNotice}
+          <div class="alert alert-warning py-2 small" role="alert">{ssoNotice}</div>
+        {/if}
+        {#if ssoEnabled}
+          <a class="btn btn-outline-primary w-100 mb-3" href="/api/v1/auth/sso/start">
+            <i class="bi bi-box-arrow-in-right me-1"></i>Sign in with SSO
+          </a>
+          <p class="text-center small text-body-secondary mb-3">or with a local account</p>
         {/if}
         <form
           on:submit={(e) => {

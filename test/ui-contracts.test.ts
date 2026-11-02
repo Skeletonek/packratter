@@ -35,4 +35,10 @@ describe('UI contracts', () => {
     const offenders = files.filter((f) => readFileSync(f, 'utf8').includes('$app/stores'));
     expect(offenders, offenders.map((f) => f.replace(uiSrc, 'ui/src')).join(', ')).toEqual([]);
   });
+
+  it('offers SSO sign-in on the login page when configured', () => {
+    const loginPage = readFileSync(join(uiSrc, 'routes/login/+page.svelte'), 'utf8');
+    expect(loginPage).toContain('/api/v1/auth/sso/status');
+    expect(loginPage).toContain('/api/v1/auth/sso/start');
+  });
 });
