@@ -324,8 +324,5 @@ export function setupSnippet(
 curl -fsSL ${baseUrl}/r/${repoName}/${envName}/gpg-public-key -o "$keyfile"
 flatpak remote-add --user --gpg-import="$keyfile" ${repoName} ${baseUrl}/r/${repoName}/${envName}/flatpak/ostree/
 rm -f "$keyfile"
-
-# Replace <app-id> with the application you want to install
-flatpak install --user ${repoName} <app-id>
 `;
 }

@@ -409,7 +409,7 @@
       <div class="card-body">
         <h5 class="card-title">Setup</h5>
         {#if repoType === 'flatpak'}
-          <p class="text-body-secondary">Run these commands on the client to add the remote and install an app:</p>
+          <p class="text-body-secondary">Run these commands on the client to add the remote:</p>
         {:else if repoType === 'deb'}
           <p class="text-body-secondary">Run these commands on the client to add the apt repository:</p>
         {:else if repoType === 'rpm'}
@@ -459,14 +459,17 @@
         </div>
       </div>
     {/if}
-    <div class="card shadow-sm mb-4">
+    <div class="card border-danger">
       <div class="card-body">
-        <h5 class="card-title">Environment: {activeEnv}</h5>
-        <p class="small text-body-secondary">
-          The environment name appears in client URLs ({repoName}/{activeEnv}); renaming it means
-          clients need updated configuration.
+        <h5 class="card-title text-danger">Danger zone</h5>
+
+        <h6 class="card-subtitle mb-1">Environment: {activeEnv}</h6>
+        <p class="small text-body-secondary mb-2">
+          The environment name is part of every client URL ({repoName}/{activeEnv}) and of the
+          flatpak package branches; renaming it requires clients to be reconfigured.
+          Deleting it removes the environment and all its packages permanently.
         </p>
-        <div class="d-flex gap-2">
+        <div class="d-flex gap-2 mb-4">
           <button type="button" class="btn btn-sm btn-outline-secondary" on:click={() => renameEnv(activeEnv)}>
             <i class="bi bi-pencil me-1"></i>Rename
           </button>
@@ -480,15 +483,11 @@
             <i class="bi bi-trash me-1"></i>Delete
           </button>
         </div>
-      </div>
-    </div>
 
-    <div class="card border-danger">
-      <div class="card-body">
-        <h5 class="card-title text-danger">Danger zone</h5>
-        <p class="small text-body-secondary">
-          Deleting the repository removes every environment, package and GPG key for
-          {"\"" + repoName + "\""} permanently. Blocked while rebuild jobs are running.
+        <h6 class="card-subtitle mb-1">Repository: {repoName}</h6>
+        <p class="small text-body-secondary mb-2">
+          Deleting the repository removes every environment, package and GPG key permanently.
+          Blocked while rebuild jobs are running.
         </p>
         <button type="button" class="btn btn-sm btn-danger" on:click={() => void deleteRepo()}>
           <i class="bi bi-trash me-1"></i>Delete repository

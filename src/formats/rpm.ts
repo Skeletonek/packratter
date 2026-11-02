@@ -165,8 +165,5 @@ gpgkey=${baseUrl}/r/${repoName}/${envName}/gpg-public-key
 EOF
 
 sudo dnf makecache --refresh
-
-# Replace <package> with the package you want to install
-sudo dnf install <package>
 `;
 }

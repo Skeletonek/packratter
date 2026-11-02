@@ -68,6 +68,7 @@ describe('deb format', () => {
     );
     expect(snippet).toContain('/etc/apt/sources.list.d/myrepo.list');
     expect(snippet).toContain('apt-get update');
+    expect(snippet).not.toContain('apt-get install');
   });
 
   it('rejects garbage without touching dpkg-deb', () => {

@@ -68,7 +68,7 @@ describe.skipIf(process.env.RUN_FULL_TESTS !== '1')('Flatpak repos', () => {
     const snippet = res.json().data;
     expect(snippet).toContain('flatpak remote-add');
     expect(snippet).toContain('/flatpak/ostree/');
-    expect(snippet).toContain('flatpak install');
+    expect(snippet).not.toContain('flatpak install');
   });
 
   it('rejects an invalid bundle with VALIDATION_ERROR', async () => {

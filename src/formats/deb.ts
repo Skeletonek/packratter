@@ -242,8 +242,5 @@ export function setupSnippet(
 echo "deb [signed-by=/usr/share/keyrings/${repoName}.gpg] ${baseUrl}/r/${repoName}/${envName}/deb ${envName} main" \\
   | sudo tee /etc/apt/sources.list.d/${repoName}.list
 sudo apt-get update
-
-# Replace <package> with the package you want to install
-sudo apt-get install <package>
 `;
 }
