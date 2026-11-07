@@ -1,6 +1,7 @@
 #!/bin/sh
-# Print the CHANGELOG section for one version. Used by the CI release job to
-# turn a tagged version's notes into a GitLab release description.
+# Print the CHANGELOG section for one version, without its heading. Used by the
+# CI release job to turn a tagged version's notes into a GitLab release
+# description (the release title already shows the version).
 # Usage: release-notes.sh <version> [changelog-file]
 # Exit 1 when the CHANGELOG has no section for <version>.
 set -eu
@@ -20,4 +21,5 @@ if [ -z "$section" ]; then
   exit 1
 fi
 
-printf '%s\n' "$section"
+# Drop the heading line and any blank lines right after it.
+printf '%s\n' "$section" | sed '1d' | sed '/./,$!d'
