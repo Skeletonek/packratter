@@ -14,6 +14,7 @@ import {
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { ensureRepoEnvDir, repoEnvDir } from '../lib/paths.js';
+import { safeFilename } from '../lib/filename.js';
 import { run } from '../lib/exec.js';
 import { detachSign, repoFingerprint } from '../gpg/index.js';
 import type { EnvRef, PackageMeta, ValidationResult } from './types.js';
@@ -24,10 +25,6 @@ function rpmDir(env: EnvRef): string {
 
 function rpmRoot(env: EnvRef): string {
   return join(repoEnvDir(env.repoId, env.id), 'rpm');
-}
-
-function safeFilename(text: string): string {
-  return text.replace(/[^a-zA-Z0-9.+~_-]/g, '_');
 }
 
 function hasRpmMagic(tmpPath: string): boolean {

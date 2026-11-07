@@ -25,11 +25,17 @@ let server: FastifyInstance;
 let idp: Server;
 let userinfo: Record<string, unknown> = {};
 
-const base: SsoPolicy = { autoCreate: true, adminClaim: null, adminValue: null };
+const base: SsoPolicy = {
+  autoCreate: true,
+  adminClaim: null,
+  adminValue: null,
+  requireVerifiedEmail: false,
+};
 const claimPolicy: SsoPolicy = {
   autoCreate: true,
   adminClaim: 'realm_access.roles',
   adminValue: 'packratter-admin',
+  requireVerifiedEmail: false,
 };
 
 function userByLogin(login: string) {
@@ -209,6 +215,32 @@ describe('SSO sign-in flow', () => {
 });
 
 describe('resolveSsoUser policy', () => {
+  it('links an existing account by email only when verified if the policy demands it', () => {
+    seedUser('link.target', 'user', { email: 'link@example.com' });
+
+    // Legacy behavior (flag off): any email claim links, verified or not.
+    const linked = resolveSsoUser({ sub: 'sub-lv-1', email: 'link@example.com' }, base);
+    expect(linked.user.login).toBe('link.target');
+    expect(linked.created).toBe(false);
+
+    seedUser('link.strict', 'user', { email: 'strict@example.com' });
+    const strict: SsoPolicy = { ...base, requireVerifiedEmail: true };
+
+    // Unverified email links nothing: auto-create makes a fresh account instead
+    // of silently taking over the existing one.
+    const unverified = resolveSsoUser({ sub: 'sub-lv-2', email: 'strict@example.com' }, strict);
+    expect(unverified.created).toBe(true);
+    expect(unverified.user.login).not.toBe('link.strict');
+
+    // A verified email links as usual.
+    const verified = resolveSsoUser(
+      { sub: 'sub-lv-3', email: 'link@example.com', email_verified: true },
+      strict,
+    );
+    expect(verified.user.login).toBe('link.target');
+    expect(verified.created).toBe(false);
+  });
+
   it('grants admin from a claim, including nested and array forms', () => {
     const nested = resolveSsoUser(
       { sub: 'sub-claim-1', realm_access: { roles: ['packratter-admin'] } },

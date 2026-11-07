@@ -3,7 +3,7 @@ import fastifyCookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
 import fastifyRateLimit from '@fastify/rate-limit';
 import { ZodError } from 'zod';
-import { existsSync, mkdirSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, realpathSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { config } from './config.js';
 import { AppError } from './errors.js';
@@ -17,6 +17,7 @@ import packagesRoutes from './api/routes/packages.js';
 import envsRoutes from './api/routes/envs.js';
 import jobsRoutes from './api/routes/jobs.js';
 import toolchainRoutes from './api/routes/toolchain.js';
+import auditRoutes from './api/routes/audit.js';
 import { resolveEnv, resolveRepo } from './lib/repos.js';
 import { formats, type RepoType } from './formats/index.js';
 import { publicKey } from './gpg/index.js';
@@ -91,7 +92,8 @@ export function buildServer() {
     }
 
     request.log.error(err);
-    sendError(request, reply, 500, 'INTERNAL_ERROR', err.message || 'Internal server error');
+    // Details go to the log; clients get a generic message.
+    sendError(request, reply, 500, 'INTERNAL_ERROR', 'Internal server error');
   });
 
   app.setNotFoundHandler((request, reply) => {
@@ -148,6 +150,7 @@ export function buildServer() {
   void app.register(packagesRoutes, { prefix: '/api/v1/repos' });
   void app.register(envsRoutes, { prefix: '/api/v1/repos' });
   void app.register(jobsRoutes, { prefix: '/api/v1/jobs' });
+  void app.register(auditRoutes, { prefix: '/api/v1' });
 
   const reposRoot = resolve(config.DATA_DIR, 'repos');
   mkdirSync(reposRoot, { recursive: true });
@@ -170,17 +173,35 @@ export function buildServer() {
     return armored;
   });
 
+  // Percent-decoding that fails must not become a 500.
+  function safeDecode(text: string): string | null {
+    try {
+      return decodeURIComponent(text);
+    } catch {
+      return null;
+    }
+  }
+
   app.get('/r/:repo/:env/*', async (request: FastifyRequest, reply: FastifyReply) => {
     const { repo, env } = request.params as { repo: string; env: string };
     const repoRow = resolveRepo(repo);
     const envRow = resolveEnv(repoRow.id, env);
 
     const pathname = new URL(request.url, 'http://localhost').pathname;
-    const rel = decodeURIComponent(pathname.slice(`/r/${repo}/${env}/`.length));
+    const rel = safeDecode(pathname.slice(`/r/${repo}/${env}/`.length));
+    if (rel === null) throw new AppError('NOT_FOUND', 'invalid path', 404);
     const filePath = join(reposRoot, repoRow.id, envRow.id, rel);
     const resolved = resolve(filePath);
     if (!resolved.startsWith(reposRoot + '/') && resolved !== reposRoot) {
       throw new AppError('NOT_FOUND', 'invalid path', 404);
+    }
+    // Symlinks are followed by design (the .db -> .db.tar.gz links), but a
+    // link pointing out of the tree must not escape containment.
+    if (existsSync(resolved)) {
+      const real = realpathSync(resolved);
+      if (!real.startsWith(realpathSync(reposRoot) + '/')) {
+        throw new AppError('NOT_FOUND', 'invalid path', 404);
+      }
     }
 
     const headers = formats[repoRow.type as RepoType].serveHeaders(resolved);
@@ -205,9 +226,16 @@ export function buildServer() {
     // Serve real dist files; everything else falls back to the SPA index.
     app.get('/app/*', (request: FastifyRequest, reply: FastifyReply) => {
       const pathname = new URL(request.url, 'http://localhost').pathname;
-      const rel = decodeURIComponent(pathname.slice('/app/'.length));
+      const rel = safeDecode(pathname.slice('/app/'.length));
+      if (rel === null) return reply.sendFile('index.html', uiRoot);
+      // Containment is checked before probing the filesystem: a path that
+      // escapes uiRoot must fall back to the index like any other non-file,
+      // not reveal whether it exists via a 403/200 difference.
       const filePath = rel ? join(uiRoot, rel) : join(uiRoot, 'index.html');
-      const isRealFile = existsSync(filePath) && statSync(filePath).isFile();
+      const inside =
+        resolve(filePath) === resolve(uiRoot) ||
+        resolve(filePath).startsWith(resolve(uiRoot) + '/');
+      const isRealFile = inside && existsSync(filePath) && statSync(filePath).isFile();
       const target = isRealFile ? rel : 'index.html';
       return reply.sendFile(target, uiRoot);
     });

@@ -12,6 +12,7 @@ import { ensureRepoEnvDir } from '../../lib/paths.js';
 import { formats, type RepoType } from '../../formats/index.js';
 import { guardNoRunningJobs } from './repos.js';
 import { requireRepoRole } from '../../auth/access.js';
+import { recordAudit } from '../../lib/audit.js';
 import { enqueueRebuild } from '../../jobs/queue.js';
 import { sortPackages } from '../../lib/packageSort.js';
 
@@ -64,6 +65,11 @@ const envsRoutes: FastifyPluginAsync = async (fastify) => {
     db.delete(schema.envs).where(eq(schema.envs.id, envRow.id)).run();
     rmSync(repoEnvDir(repoRow.id, envRow.id), { recursive: true, force: true });
 
+    recordAudit(request, 'env.delete', {
+      type: 'env',
+      id: envRow.id,
+      label: `${repoRow.name}/${envRow.name}`,
+    });
     return { success: true };
   });
 
@@ -103,6 +109,12 @@ const envsRoutes: FastifyPluginAsync = async (fastify) => {
           .run();
       }
 
+      recordAudit(
+        request,
+        'env.rename',
+        { type: 'env', id: envRow.id, label: `${repoRow.name}/${body.name}` },
+        { from: envRow.name, to: body.name },
+      );
       const jobId = await enqueueRebuild(repoRow.id, envRow.id);
       return { success: true, data: { id: envRow.id, name: body.name, jobId } };
     }

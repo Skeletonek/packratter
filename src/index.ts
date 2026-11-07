@@ -2,11 +2,13 @@ import { buildServer } from './server.js';
 import { applyMigrations } from './db/index.js';
 import { bootstrapAdmin } from './auth/bootstrap.js';
 import { config } from './config.js';
+import { startHousekeeping } from './lib/housekeeping.js';
 import { scanToolchain } from './lib/toolchain.js';
 
 async function main() {
   applyMigrations();
   await bootstrapAdmin();
+  startHousekeeping();
 
   const server = buildServer();
 

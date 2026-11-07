@@ -5,11 +5,15 @@ import * as schema from '../../db/schema.js';
 import { verifyToken } from '../../auth/tokens.js';
 import { SESSION_COOKIE, sessionUserId } from '../../auth/sessions.js';
 import { AppError } from '../../errors.js';
+import { nowSeconds } from '../../lib/time.js';
 
 // Login, logout and the SSO flow need to work without a valid session: logout
 // must still be able to clear a too-old cookie and SSO is how one gets in.
 const PUBLIC_API_PATHS = new Set([
   '/api/v1/auth/login',
+  '/api/v1/auth/login/totp',
+  '/api/v1/auth/login/webauthn/start',
+  '/api/v1/auth/login/webauthn/finish',
   '/api/v1/auth/logout',
   '/api/v1/auth/sso/status',
   '/api/v1/auth/sso/start',
@@ -40,6 +44,17 @@ async function resolveUser(request: FastifyRequest): Promise<SchemaUser> {
     const row = rows[0];
     if (!row || !(await verifyToken(token, row.hash))) {
       throw unauthorized('Invalid token');
+    }
+    if (row.expiresAt !== null && row.expiresAt <= nowSeconds()) {
+      throw unauthorized('Token expired');
+    }
+    // Throttled write: one per minute per key keeps a busy token from costing a
+    // DB write on every request without any real staleness.
+    if (row.lastUsedAt === null || row.lastUsedAt < nowSeconds() - 60) {
+      db.update(schema.tokens)
+        .set({ lastUsedAt: nowSeconds() })
+        .where(eq(schema.tokens.id, row.id))
+        .run();
     }
     const user = loadUser(row.userId);
     if (!user) {

@@ -8,6 +8,7 @@ import { AppError } from '../../errors.js';
 import { config } from '../../config.js';
 import { requireAdmin } from './auth.js';
 import { gpgHome } from '../../gpg/index.js';
+import { recordAudit } from '../../lib/audit.js';
 import { clearDiscoveryCache, loadSsoConfig, ssoEnabled, testDiscovery } from '../../auth/sso.js';
 
 // Settings are boot-time configuration: the read-only view carries the value
@@ -75,6 +76,7 @@ const putSsoSchema = z.object({
   adminClaim: z.preprocess((v) => (v === '' ? null : v), z.string().max(128).nullable().optional()),
   adminValue: z.preprocess((v) => (v === '' ? null : v), z.string().max(128).nullable().optional()),
   autoCreate: z.boolean().optional(),
+  requireVerifiedEmail: z.boolean().optional(),
 });
 
 const testSsoSchema = z.object({ issuer: z.string().trim().url().max(512) });
@@ -91,6 +93,7 @@ function maskedSsoView() {
     adminClaim: row?.adminClaim ?? null,
     adminValue: row?.adminValue ?? null,
     autoCreate: row?.autoCreate ?? true,
+    requireVerifiedEmail: row?.requireVerifiedEmail ?? false,
     // the secret is never echoed back — only whether one is on file
     hasSecret: Boolean(row?.clientSecret),
   };
@@ -137,6 +140,7 @@ const settingsRoutes: FastifyPluginAsync = async (fastify) => {
       adminClaim: body.adminClaim ?? row?.adminClaim ?? null,
       adminValue: body.adminValue ?? row?.adminValue ?? null,
       autoCreate: body.autoCreate ?? row?.autoCreate ?? true,
+      requireVerifiedEmail: body.requireVerifiedEmail ?? row?.requireVerifiedEmail ?? false,
     };
 
     if (row) {
@@ -151,6 +155,15 @@ const settingsRoutes: FastifyPluginAsync = async (fastify) => {
     }
     clearDiscoveryCache();
 
+    recordAudit(
+      request,
+      'sso.config_update',
+      { type: 'sso', label: values.issuer },
+      {
+        enabled: values.enabled,
+        autoCreate: values.autoCreate,
+      },
+    );
     return { success: true, data: maskedSsoView() };
   });
 

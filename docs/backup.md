@@ -42,9 +42,28 @@ publish trusted packages to every client configured for this service.
 
 ## Schedule
 
-A systemd timer or cron entry that runs both commands nightly and keeps ~14 daily
-and a few weekly copies is plenty for the expected repo sizes. Test the restore at
+Backup frequency is a business decision, not a technical one: how much
+publishing history can you afford to lose? A daily snapshot plus a tarball
+after each batch of uploads is a common starting point. A systemd timer or
+cron entry that runs both commands nightly and keeps ~14 daily and a few
+weekly copies is plenty for the expected repo sizes. Test the restore at
 least once after setting it up.
+
+## Database growth
+
+Old jobs and audit entries are deleted automatically (`JOB_RETENTION_DAYS`,
+`AUDIT_RETENTION_DAYS` — see `production.md`), but SQLite reuses the freed
+pages instead of shrinking the file. That is fine at Packratter's scale. If
+the file ever balloons and then mostly empties, a one-off `VACUUM` during a
+quiet moment reclaims the space (it can block writers while it runs):
+
+```bash
+node --input-type=module -e '
+  const { DatabaseSync } = await import("node:sqlite");
+  const db = new DatabaseSync(process.env.DATA_DIR + "/db.sqlite");
+  db.exec("VACUUM");
+'
+```
 
 ## Restore
 

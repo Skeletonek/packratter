@@ -1,11 +1,12 @@
 import { createHash } from 'node:crypto';
 import { linkSync, mkdirSync, renameSync, unlinkSync } from 'node:fs';
-import { dirname, join, basename } from 'node:path';
+import { dirname, join, basename, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { eq } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import * as schema from '../db/schema.js';
 import { ensureRepoEnvDir, repoEnvDir } from '../lib/paths.js';
+import { safeFilename } from '../lib/filename.js';
 import { run } from '../lib/exec.js';
 import { detachSign, gpgHome, repoFingerprint } from '../gpg/index.js';
 import type { EnvRef, PackageMeta, ValidationResult } from './types.js';
@@ -75,9 +76,12 @@ export function ingest(env: EnvRef, tmpPath: string, bytes: Buffer): PackageMeta
   const version = pkgrel && !pkgver.endsWith(`-${pkgrel}`) ? `${pkgver}-${pkgrel}` : pkgver;
 
   const ext = detectExtension(bytes);
-  const filename = `${pkgname}-${version}-${arch}${ext}`;
+  const filename = `${safeFilename(pkgname)}-${safeFilename(version)}-${safeFilename(arch)}${ext}`;
   const dir = ensureRepoEnvDir(env.repoId, env.id);
   const dest = join(dir, filename);
+  if (resolve(dest) !== join(resolve(dir), filename)) {
+    throw new Error('package filename escapes the repository directory');
+  }
 
   mkdirSync(dirname(tmpPath), { recursive: true });
   renameSync(tmpPath, dest);

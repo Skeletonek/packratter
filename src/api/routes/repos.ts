@@ -15,6 +15,7 @@ import { generateRepoKey, repoFingerprint, gpgHome } from '../../gpg/index.js';
 import { formats, type RepoType } from '../../formats/index.js';
 import { sortPackages } from '../../lib/packageSort.js';
 import { config } from '../../config.js';
+import { recordAudit } from '../../lib/audit.js';
 import { requireAdmin } from './auth.js';
 import { repoRole, requireRepoRole, visibleRepoIds } from '../../auth/access.js';
 
@@ -143,6 +144,7 @@ const reposRoutes: FastifyPluginAsync = async (fastify) => {
     rmSync(envDir, { recursive: true, force: true });
     rmSync(gpgHome(repoRow.id), { recursive: true, force: true });
 
+    recordAudit(request, 'repo.delete', { type: 'repo', id: repoRow.id, label: repoRow.name });
     return { success: true };
   });
 
@@ -187,6 +189,7 @@ const reposRoutes: FastifyPluginAsync = async (fastify) => {
       throw new AppError('BAD_REQUEST', 'nothing to update', 400);
     }
     db.update(schema.repos).set(patch).where(eq(schema.repos.id, row.id)).run();
+    recordAudit(request, 'repo.update', { type: 'repo', id: row.id, label: row.name }, patch);
     return {
       success: true,
       data: {
@@ -255,6 +258,12 @@ const reposRoutes: FastifyPluginAsync = async (fastify) => {
     db.insert(schema.repoMembers)
       .values({ repoId: row.id, userId: user.id, role: body.role })
       .run();
+    recordAudit(
+      request,
+      'repo.member_add',
+      { type: 'repo', id: row.id, label: row.name },
+      { login: user.login, role: body.role },
+    );
     reply.status(201);
     return { success: true, data: { login: user.login, role: body.role } };
   });
@@ -272,6 +281,12 @@ const reposRoutes: FastifyPluginAsync = async (fastify) => {
       .set({ role: body.role })
       .where(and(eq(schema.repoMembers.repoId, row.id), eq(schema.repoMembers.userId, user.id)))
       .run();
+    recordAudit(
+      request,
+      'repo.member_update',
+      { type: 'repo', id: row.id, label: row.name },
+      { login: user.login, role: body.role },
+    );
     return { success: true, data: { login: user.login, role: body.role } };
   });
 
@@ -286,6 +301,12 @@ const reposRoutes: FastifyPluginAsync = async (fastify) => {
     db.delete(schema.repoMembers)
       .where(and(eq(schema.repoMembers.repoId, row.id), eq(schema.repoMembers.userId, user.id)))
       .run();
+    recordAudit(
+      request,
+      'repo.member_remove',
+      { type: 'repo', id: row.id, label: row.name },
+      { login: user.login },
+    );
     return { success: true };
   });
 };

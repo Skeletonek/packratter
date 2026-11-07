@@ -16,6 +16,7 @@
     { path: '/settings/users', label: 'Users', icon: 'bi-people' },
     { path: '/settings/authentication', label: 'Authentication', icon: 'bi-shield-lock' },
     { path: '/settings/keys', label: 'Keys', icon: 'bi-key' },
+    { path: '/settings/audit', label: 'Audit', icon: 'bi-journal-text' },
   ];
 
   function isActive(tab: Tab): boolean {

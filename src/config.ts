@@ -27,6 +27,10 @@ const configSchema = z
     SESSION_TTL_MIN: z.coerce.number().int().positive().default(1440),
     /** Session length for "remember this device" logins, in days */
     SESSION_REMEMBER_DAYS: z.coerce.number().int().positive().default(7),
+    /** Finished jobs older than this are deleted; keeps job logs from growing the db */
+    JOB_RETENTION_DAYS: z.coerce.number().int().positive().default(30),
+    /** Audit entries older than this are deleted; 0 keeps them forever */
+    AUDIT_RETENTION_DAYS: z.coerce.number().int().min(0).default(365),
     /** Turn an ecosystem off entirely, regardless of installed tools ('1' enables) */
     DISABLE_PACMAN: disabledFlag('DISABLE_PACMAN'),
     DISABLE_DEB: disabledFlag('DISABLE_DEB'),
@@ -46,6 +50,10 @@ const configSchema = z
     SSO_ADMIN_VALUE: z.preprocess(emptyToUndefined, z.string().optional()),
     /** Set '0' to deny SSO sign-in for identities without an existing account */
     SSO_AUTO_CREATE: enabledFlag('SSO_AUTO_CREATE'),
+    /** Set '1' to only link SSO identities to existing accounts when the IdP
+     *  asserts email_verified. Off by default: common IdPs (e.g. Authentik) do
+     *  not set the claim and would silently stop linking. */
+    SSO_REQUIRE_VERIFIED_EMAIL: disabledFlag('SSO_REQUIRE_VERIFIED_EMAIL'),
   })
   .refine(
     (cfg) =>

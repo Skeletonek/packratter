@@ -6,6 +6,7 @@
   import UserMenu from '$lib/UserMenu.svelte';
   import ToolchainBanner from '$lib/ToolchainBanner.svelte';
   import NoticeBanner from '$lib/NoticeBanner.svelte';
+  import InputPrompt from '$lib/InputPrompt.svelte';
   import { version, buildTime } from '$lib/buildInfo.js';
 </script>
 
@@ -25,6 +26,7 @@
 <ToolchainBanner />
 <NoticeBanner />
 
+
 <main class="flex-fill py-4">
   <slot />
 </main>
@@ -37,3 +39,4 @@
 </footer>
 
 <ErrorDialog />
+<InputPrompt />

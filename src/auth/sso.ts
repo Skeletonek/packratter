@@ -179,6 +179,7 @@ export interface SsoPolicy {
   autoCreate: boolean;
   adminClaim: string | null;
   adminValue: string | null;
+  requireVerifiedEmail: boolean;
 }
 
 export function policyFromConfig(): SsoPolicy {
@@ -187,6 +188,7 @@ export function policyFromConfig(): SsoPolicy {
     autoCreate: row?.autoCreate ?? true,
     adminClaim: row?.adminClaim ?? null,
     adminValue: row?.adminValue ?? null,
+    requireVerifiedEmail: row?.requireVerifiedEmail ?? false,
   };
 }
 
@@ -263,9 +265,15 @@ export function resolveSsoUser(
 
   let user = db.select().from(schema.users).where(eq(schema.users.ssoSub, sub)).all()[0];
   if (!user && email) {
-    user = db.select().from(schema.users).where(eq(schema.users.email, email)).all()[0];
-    if (user) {
-      db.update(schema.users).set({ ssoSub: sub }).where(eq(schema.users.id, user.id)).run();
+    // Email-based linking is only as trustworthy as the IdP's email handling.
+    // With requireVerifiedEmail, unverified addresses link nothing: the caller
+    // falls through to auto-create or denial instead of an account takeover.
+    const emailOk = !policy.requireVerifiedEmail || info.email_verified === true;
+    if (emailOk) {
+      user = db.select().from(schema.users).where(eq(schema.users.email, email)).all()[0];
+      if (user) {
+        db.update(schema.users).set({ ssoSub: sub }).where(eq(schema.users.id, user.id)).run();
+      }
     }
   }
 

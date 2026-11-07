@@ -13,6 +13,7 @@
     adminClaim: string | null;
     adminValue: string | null;
     autoCreate: boolean;
+    requireVerifiedEmail: boolean;
     hasSecret: boolean;
   }
 
@@ -30,6 +31,7 @@
   let adminClaim = '';
   let adminValue = '';
   let autoCreate = true;
+  let requireVerifiedEmail = false;
   let enabled = true;
   let hasSecret = false;
   let seededFromEnv = false;
@@ -52,6 +54,7 @@
     adminClaim = s.adminClaim ?? '';
     adminValue = s.adminValue ?? '';
     autoCreate = s.autoCreate;
+    requireVerifiedEmail = s.requireVerifiedEmail;
     enabled = s.enabled;
     hasSecret = s.hasSecret;
     seededFromEnv = s.seededFromEnv;
@@ -69,6 +72,7 @@
         adminClaim: adminClaim.trim(),
         adminValue: adminValue.trim(),
         autoCreate,
+        requireVerifiedEmail,
       };
       const trimmedSecret = clientSecret.trim();
       if (trimmedSecret) payload.clientSecret = trimmedSecret;
@@ -222,6 +226,24 @@
               <input id="sso-auto-create" class="form-check-input" type="checkbox" bind:checked={autoCreate} />
               <label for="sso-auto-create" class="form-check-label small">
                 grant accounts on first sign-in
+              </label>
+            </div>
+          </div>
+        </div>
+        <div class="row g-2 align-items-center mb-2">
+          <div class="col-12 col-md-3 col-lg-2 text-md-end">
+            <label for="sso-verified-email" class="form-label small mb-0">Verified email</label>
+          </div>
+          <div class="col-12 col-md-9 col-lg-10">
+            <div class="form-check form-switch mb-0">
+              <input
+                id="sso-verified-email"
+                class="form-check-input"
+                type="checkbox"
+                bind:checked={requireVerifiedEmail}
+              />
+              <label for="sso-verified-email" class="form-check-label small">
+                only link existing accounts when the provider reports a verified email
               </label>
             </div>
           </div>

@@ -46,8 +46,8 @@ function seedSsoConfig(): void {
   sqlite
     .prepare(
       `INSERT INTO sso_config
-         (id, enabled, issuer, client_id, client_secret, scopes, admin_claim, admin_value, auto_create, seeded_from_env)
-       SELECT 'default', 1, ?, ?, ?, ?, ?, ?, ?, 1
+         (id, enabled, issuer, client_id, client_secret, scopes, admin_claim, admin_value, auto_create, require_verified_email, seeded_from_env)
+       SELECT 'default', 1, ?, ?, ?, ?, ?, ?, ?, ?, 1
        WHERE NOT EXISTS (SELECT 1 FROM sso_config)`,
     )
     .run(
@@ -58,5 +58,6 @@ function seedSsoConfig(): void {
       config.SSO_ADMIN_CLAIM ?? null,
       config.SSO_ADMIN_VALUE ?? null,
       config.SSO_AUTO_CREATE ? 1 : 0,
+      config.SSO_REQUIRE_VERIFIED_EMAIL ? 1 : 0,
     );
 }

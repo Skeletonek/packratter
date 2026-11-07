@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { eq, lt } from 'drizzle-orm';
+import { and, eq, lt } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import * as schema from '../db/schema.js';
 import { config } from '../config.js';
@@ -16,17 +16,29 @@ function hashCookieValue(value: string): string {
   return createHash('sha256').update(value).digest('hex');
 }
 
+export { hashCookieValue };
+
 export interface CreatedSession {
   cookieValue: string;
   /** Cookie Max-Age in seconds; undefined = browser-session cookie */
   maxAge: number | undefined;
 }
 
-export function createSession(userId: string, remember: boolean): CreatedSession {
+export function createSession(
+  userId: string,
+  remember: boolean,
+  userAgent?: string,
+): CreatedSession {
   const cookieValue = `${COOKIE_PREFIX}${randomBytes(32).toString('base64url')}`;
   const ttlSeconds = remember ? config.SESSION_REMEMBER_DAYS * 86400 : config.SESSION_TTL_MIN * 60;
   db.insert(schema.sessions)
-    .values({ id: hashCookieValue(cookieValue), userId, expiresAt: nowSeconds() + ttlSeconds })
+    .values({
+      id: hashCookieValue(cookieValue),
+      userId,
+      expiresAt: nowSeconds() + ttlSeconds,
+      createdAt: nowSeconds(),
+      userAgent: userAgent?.slice(0, 256) ?? null,
+    })
     .run();
   return { cookieValue, maxAge: remember ? config.SESSION_REMEMBER_DAYS * 86400 : undefined };
 }
@@ -35,6 +47,27 @@ export function deleteSession(cookieValue: string): void {
   db.delete(schema.sessions)
     .where(eq(schema.sessions.id, hashCookieValue(cookieValue)))
     .run();
+}
+
+export function deleteSessionById(id: string, userId: string): boolean {
+  const result = db
+    .delete(schema.sessions)
+    .where(and(eq(schema.sessions.id, id), eq(schema.sessions.userId, userId)))
+    .run();
+  return result.changes > 0;
+}
+
+export function deleteAllSessions(userId: string): void {
+  db.delete(schema.sessions).where(eq(schema.sessions.userId, userId)).run();
+}
+
+export function listSessions(userId: string) {
+  return db
+    .select()
+    .from(schema.sessions)
+    .where(eq(schema.sessions.userId, userId))
+    .orderBy(schema.sessions.createdAt)
+    .all();
 }
 
 export function purgeExpiredSessions(): void {

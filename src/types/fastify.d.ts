@@ -1,7 +1,8 @@
 import 'fastify';
+import type { users } from '../db/schema.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
-    user?: { id: string; login: string; role: string };
+    user?: typeof users.$inferSelect;
   }
 }

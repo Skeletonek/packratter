@@ -31,10 +31,3 @@ the web UI.
 ## Changelog
 
 `CHANGELOG.md` uses only these sections: **Changes**, **Fixes**, **Security**, and **Updates** (reserved for dependency updates). Omit empty sections. Entries should be user-facing; avoid implementation details, stage labels, and internal architecture speak.
-
-## Stages
-
-See `STAGES.md`. Current progress: **S7 complete** (SSO/OIDC as an additional login
-method, per-repo access grants (maintainer/viewer), claim-managed admin role — shipped
-in 0.7.0 alongside the flatpak and package-list improvements). S8 ops & audit hardening
-is next.

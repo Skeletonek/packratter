@@ -16,6 +16,7 @@ import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { gzipSync } from 'node:zlib';
 import { ensureRepoEnvDir, repoEnvDir } from '../lib/paths.js';
+import { safeFilename } from '../lib/filename.js';
 import { run } from '../lib/exec.js';
 import { clearSign, detachSign, repoFingerprint } from '../gpg/index.js';
 import type { EnvRef, PackageMeta, ValidationResult } from './types.js';
@@ -28,10 +29,6 @@ function debDir(env: EnvRef): string {
 
 function debRoot(env: EnvRef): string {
   return join(repoEnvDir(env.repoId, env.id), 'deb');
-}
-
-function safeFilename(text: string): string {
-  return text.replace(/[^a-zA-Z0-9.+~_-]/g, '_');
 }
 
 export function renameEnv(env: EnvRef, newName: string): void {

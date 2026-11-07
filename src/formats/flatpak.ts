@@ -11,6 +11,7 @@ import {
 import { join, basename } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { ensureRepoEnvDir } from '../lib/paths.js';
+import { safeFilename as sanitize } from '../lib/filename.js';
 import { run } from '../lib/exec.js';
 import { gpgHome, repoFingerprint } from '../gpg/index.js';
 import { config } from '../config.js';
@@ -29,7 +30,7 @@ function bundlesDir(env: EnvRef): string {
 }
 
 function safeFilename(ref: string): string {
-  return `${ref.replace(/[^a-zA-Z0-9._-]/g, '_')}.flatpak`;
+  return `${sanitize(ref)}.flatpak`;
 }
 
 function ensureOstreeRepo(env: EnvRef): void {
