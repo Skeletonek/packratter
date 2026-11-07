@@ -20,7 +20,7 @@ import toolchainRoutes from './api/routes/toolchain.js';
 import auditRoutes from './api/routes/audit.js';
 import { resolveEnv, resolveRepo } from './lib/repos.js';
 import { formats, type RepoType } from './formats/index.js';
-import { publicKey } from './gpg/index.js';
+import { publicKey, publicKeyByFingerprint } from './gpg/index.js';
 
 const uiRoot = join(import.meta.dirname, '../dist/ui');
 const hasUi = existsSync(uiRoot);
@@ -172,6 +172,22 @@ export function buildServer() {
     void reply.type('text/plain; charset=utf-8');
     return armored;
   });
+
+  // Replaced keys stay downloadable by fingerprint so clients pinned to the
+  // old key can transition at their own pace.
+  app.get(
+    '/r/:repo/:env/gpg-public-key/:fingerprint',
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const { repo, fingerprint } = request.params as { repo: string; fingerprint: string };
+      const repoRow = resolveRepo(repo);
+      const armored = publicKeyByFingerprint(repoRow.id, fingerprint);
+      if (!armored) {
+        throw new AppError('NOT_FOUND', 'no gpg key for repo', 404);
+      }
+      void reply.type('text/plain; charset=utf-8');
+      return armored;
+    },
+  );
 
   // Percent-decoding that fails must not become a 500.
   function safeDecode(text: string): string | null {

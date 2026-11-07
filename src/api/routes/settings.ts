@@ -7,7 +7,6 @@ import * as schema from '../../db/schema.js';
 import { AppError } from '../../errors.js';
 import { config } from '../../config.js';
 import { requireAdmin } from './auth.js';
-import { gpgHome } from '../../gpg/index.js';
 import { recordAudit } from '../../lib/audit.js';
 import { clearDiscoveryCache, loadSsoConfig, ssoEnabled, testDiscovery } from '../../auth/sso.js';
 
@@ -46,12 +45,15 @@ const ALGORITHM_NAMES: Record<number, string> = {
   22: 'EdDSA',
 };
 
-function keyAlgorithm(repoId: string, fingerprint: string): string | null {
+function keyAlgorithm(publicArmored: string): string | null {
+  // Parse the stored public key rather than the keyring: replaced keys are
+  // gone from the homedir but still listable here.
   const list = spawnSync(
     'gpg',
-    ['--homedir', gpgHome(repoId), '--with-colons', '--list-keys', fingerprint],
+    ['--batch', '--with-colons', '--import-options', 'show-only', '--import'],
     {
       encoding: 'utf8',
+      input: publicArmored,
       env: { ...process.env, LC_ALL: 'C' },
     },
   );
@@ -59,11 +61,11 @@ function keyAlgorithm(repoId: string, fingerprint: string): string | null {
   const pub = list.stdout.split('\n').find((line) => line.startsWith('pub:'));
   if (!pub) return null;
   const fields = pub.split(':');
-  const id = Number(fields[4] ?? 0);
+  const id = Number(fields[3] ?? 0);
   const name = ALGORITHM_NAMES[id];
   if (!name) return null;
   // The key length field is empty for ECC keys.
-  return fields[3] ? `${name} (${fields[3]} bit)` : name;
+  return fields[2] ? `${name} (${fields[2]} bit)` : name;
 }
 
 const putSsoSchema = z.object({
@@ -190,6 +192,7 @@ const settingsRoutes: FastifyPluginAsync = async (fastify) => {
         fingerprint: schema.gpgKeys.fingerprint,
         publicArmored: schema.gpgKeys.publicArmored,
         createdAt: schema.gpgKeys.createdAt,
+        active: schema.repoKeys.active,
       })
       .from(schema.repoKeys)
       .innerJoin(schema.gpgKeys, eq(schema.repoKeys.keyId, schema.gpgKeys.id))
@@ -202,7 +205,8 @@ const settingsRoutes: FastifyPluginAsync = async (fastify) => {
         repo: row.repo,
         repoType: row.repoType,
         fingerprint: row.fingerprint,
-        algorithm: keyAlgorithm(row.repoId, row.fingerprint),
+        active: row.active,
+        algorithm: keyAlgorithm(row.publicArmored),
         // epoch seconds, like every other API row the UI formats itself
         createdAt: row.createdAt,
         publicKey: row.publicArmored,

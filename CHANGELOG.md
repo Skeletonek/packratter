@@ -1,13 +1,15 @@
 # Changelog
 
-## 0.8.0 — 2026-11-06
+## 0.8.0 — 2026-11-07
 
 ### Changes
 
 - Audit trail of admin and destructive actions.
 - Session list on the Account page.
 - API keys can expire
-- Two-factor sign-in for local accounts: authenticator apps (TOTP) and security keys (WebAuthn). 
+- Two-factor sign-in for local accounts: authenticator apps (TOTP) and security keys (WebAuthn).
+- Add importing your own key at repository creation or replace a repository's key. 
+- Support passphrase protected GPG keys
 - Old jobs and audit entries are cleaned up automatically
 - SSO can require verified emails before linking accounts
 - New documentation: production checklist, signing keys, two-factor auth.
@@ -19,6 +21,10 @@
 - Pacman metadata can no longer write outside the repository directory.
 - The web UI path no longer reveals whether server paths exist.
 - Internal error details are no longer sent to clients.
+
+### Fixes
+
+- Fixed GPG algorithm not being displayed properly
 
 ## 0.7.0 — 2026-11-02
 

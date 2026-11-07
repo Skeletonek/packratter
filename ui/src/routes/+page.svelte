@@ -33,6 +33,9 @@
   let name = '';
   let type = 'pacman';
   let envName = '';
+  let ownKey = false;
+  let privateKey = '';
+  let passphrase = '';
   let loading = true;
   let view = viewFromStorage();
 
@@ -52,7 +55,14 @@
     const res = await fetch('/api/v1/repos', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, type, env: envName.trim() || undefined }),
+      body: JSON.stringify({
+        name,
+        type,
+        env: envName.trim() || undefined,
+        ...(ownKey && privateKey.trim()
+          ? { privateKey: privateKey.trim(), passphrase: passphrase || undefined }
+          : {}),
+      }),
     });
     const json = await res.json();
     if (!json.success) {
@@ -62,6 +72,9 @@
     name = '';
     envName = '';
     type = 'pacman';
+    ownKey = false;
+    privateKey = '';
+    passphrase = '';
     await load();
     await goto(resolve(`/repos/${json.data.name}`));
   }
@@ -209,6 +222,35 @@
           <button type="submit" class="btn btn-primary w-100">Create</button>
         </div>
       </form>
+      <div class="mt-2">
+        <div class="form-check">
+          <input id="own-key" type="checkbox" class="form-check-input" bind:checked={ownKey} />
+          <label for="own-key" class="form-check-label small">
+            Sign with your own GPG key <span class="text-body-secondary">(instead of generating one)</span>
+          </label>
+        </div>
+        {#if ownKey}
+          <div class="row g-2 mt-1">
+            <div class="col-12">
+              <textarea
+                class="form-control form-control-sm font-monospace"
+                rows="4"
+                bind:value={privateKey}
+                placeholder="-----BEGIN PGP PRIVATE KEY BLOCK-----"
+              ></textarea>
+            </div>
+            <div class="col-12 col-sm-6">
+              <input
+                class="form-control form-control-sm"
+                type="password"
+                bind:value={passphrase}
+                placeholder="Key passphrase (if any)"
+                autocomplete="new-password"
+              />
+            </div>
+          </div>
+        {/if}
+      </div>
     </div>
   </div>
 </div>

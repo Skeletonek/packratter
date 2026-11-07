@@ -51,6 +51,8 @@ export const repoKeys = sqliteTable(
     keyId: text('key_id')
       .notNull()
       .references(() => gpgKeys.id, { onDelete: 'cascade' }),
+    /** Exactly one active key per repo signs; replaced keys stay public-downloadable. */
+    active: integer({ mode: 'boolean' }).notNull().default(true),
   },
   (table) => [primaryKey({ columns: [table.repoId, table.keyId] })],
 );

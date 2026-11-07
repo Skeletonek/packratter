@@ -11,8 +11,15 @@ import { nowSeconds } from '../../lib/time.js';
 import { resolveEnv, resolveRepo } from '../../lib/repos.js';
 import { assertTypeAvailable, scanToolchain } from '../../lib/toolchain.js';
 import { ensureRepoEnvDir } from '../../lib/paths.js';
-import { generateRepoKey, repoFingerprint, gpgHome } from '../../gpg/index.js';
+import {
+  clearPassphrase,
+  generateRepoKey,
+  gpgHome,
+  importRepoKey,
+  repoFingerprint,
+} from '../../gpg/index.js';
 import { formats, type RepoType } from '../../formats/index.js';
+import { enqueueRebuild } from '../../jobs/queue.js';
 import { sortPackages } from '../../lib/packageSort.js';
 import { config } from '../../config.js';
 import { recordAudit } from '../../lib/audit.js';
@@ -50,6 +57,10 @@ const createRepoSchema = z.object({
     .max(32)
     .regex(/^[a-z0-9-]+$/)
     .optional(),
+  /** Armored private key to sign with instead of a generated one. */
+  privateKey: z.string().min(1).optional(),
+  /** Passphrase of privateKey, if it has one. */
+  passphrase: z.string().optional(),
 });
 
 const patchRepoSchema = z.object({
@@ -86,7 +97,23 @@ const reposRoutes: FastifyPluginAsync = async (fastify) => {
       .run();
     db.insert(schema.envs).values({ id: envId, repoId: id, name: envName }).run();
     ensureRepoEnvDir(id, envId);
-    generateRepoKey(id);
+    if (body.privateKey !== undefined) {
+      let fingerprint: string;
+      try {
+        fingerprint = importRepoKey(id, body.privateKey, body.passphrase).fingerprint;
+      } catch (err) {
+        // The repo is useless without its key: roll back the fresh rows.
+        db.delete(schema.repos).where(eq(schema.repos.id, id)).run();
+        throw new AppError(
+          'BAD_REQUEST',
+          err instanceof Error ? err.message : 'key import failed',
+          400,
+        );
+      }
+      recordAudit(request, 'key.import', { type: 'repo', id, label: body.name }, { fingerprint });
+    } else {
+      generateRepoKey(id);
+    }
 
     reply.status(201);
     return {
@@ -143,9 +170,51 @@ const reposRoutes: FastifyPluginAsync = async (fastify) => {
     const envDir = join(config.DATA_DIR, 'repos', repoRow.id);
     rmSync(envDir, { recursive: true, force: true });
     rmSync(gpgHome(repoRow.id), { recursive: true, force: true });
+    clearPassphrase(repoRow.id);
 
     recordAudit(request, 'repo.delete', { type: 'repo', id: repoRow.id, label: repoRow.name });
     return { success: true };
+  });
+
+  const importKeySchema = z.object({
+    privateKey: z.string().min(1),
+    passphrase: z.string().optional(),
+  });
+
+  // Replacement is rotation: metadata is re-signed, so clients pinned to the
+  // old key must switch. The old public key stays downloadable by fingerprint.
+  fastify.post('/:repo/key', async (request) => {
+    requireAdmin(request);
+    const { repo } = request.params as { repo: string };
+    const body = importKeySchema.parse(request.body);
+    const repoRow = resolveRepo(repo);
+    guardNoRunningJobs(repoRow.id, 'repository');
+
+    let fingerprint: string;
+    try {
+      fingerprint = importRepoKey(repoRow.id, body.privateKey, body.passphrase).fingerprint;
+    } catch (err) {
+      throw new AppError(
+        'BAD_REQUEST',
+        err instanceof Error ? err.message : 'key import failed',
+        400,
+      );
+    }
+
+    // Re-sign all environments with the new key.
+    const envs = db.select().from(schema.envs).where(eq(schema.envs.repoId, repoRow.id)).all();
+    const jobIds: string[] = [];
+    for (const env of envs) {
+      jobIds.push(await enqueueRebuild(repoRow.id, env.id));
+    }
+
+    recordAudit(
+      request,
+      'key.rotate',
+      { type: 'repo', id: repoRow.id, label: repoRow.name },
+      { fingerprint },
+    );
+    return { success: true, data: { fingerprint, jobIds } };
   });
 
   fastify.get('/:repo', async (request) => {

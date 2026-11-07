@@ -158,6 +158,20 @@ Request:
 ```
 
 `env` (the first environment's name) is optional and defaults to `stable`.
+To sign with your own GPG key instead of a generated one, pass `privateKey`
+(armored private key block) and, for passphrase-protected keys, `passphrase`:
+
+```json
+{
+  "name": "myrepo",
+  "type": "pacman",
+  "privateKey": "-----BEGIN PGP PRIVATE...",
+  "passphrase": "..."
+}
+```
+
+An importable key (secret key present, passphrase correct) is required —
+otherwise the repository is not created and `400 BAD_REQUEST` explains why.
 
 Response: `201 Created`
 
@@ -172,6 +186,23 @@ Response: `201 Created`
   }
 }
 ```
+
+### `POST /api/v1/repos/:repo/key` (admin)
+
+Replace the repository's signing key (rotation). The new key is validated on
+import; the old one stops signing but stays downloadable by fingerprint at
+`/r/<repo>/<env>/gpg-public-key/<fingerprint>`. Metadata for every environment
+is re-signed with the new key.
+
+Request:
+
+```json
+{ "privateKey": "-----BEGIN PGP PRIVATE...", "passphrase": "..." }
+```
+
+Answers `409 REPO_BUSY` while rebuild jobs are pending or running, `400
+BAD_REQUEST` when the key is not importable. Response: `200 OK` with
+`{ "fingerprint": "...", "jobIds": [...] }`.
 
 ### `GET /api/v1/repos`
 
@@ -317,3 +348,8 @@ Serve repository files with format-appropriate cache headers. For example:
 
 Returns the armored GPG public key of the repository as plain text. This is the URL
 that dnf's `gpgkey=` and the setup snippets use.
+
+### `GET /r/:repo/:env/gpg-public-key/:fingerprint` (public)
+
+Returns the armored public key of any key ever used by the repository,
+including replaced ones — for clients transitioning after a key rotation.
