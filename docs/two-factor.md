@@ -25,7 +25,9 @@ Enrollment happens on the **Account** page:
   store the 10 recovery codes shown once — download them as a text file. TOTP
   turns on only after you confirm the codes are saved.
 - **Security keys** — register one or more keys and label them. Register a
-  backup key so losing one is not an outage.
+  backup key so losing one is not an outage. Removing a key (including the
+  last one) requires your password; sign-in then falls back to the password,
+  or to SSO for accounts without one.
 
 ## Recovery story
 

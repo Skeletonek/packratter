@@ -667,4 +667,53 @@ describe('two-factor login', () => {
       .all();
     expect(keys).toHaveLength(0);
   });
+
+  it('removing the last security key falls back to password login', async () => {
+    const loginName = `keyrm-${randomUUID().slice(0, 8)}`;
+    const createRes = await server.inject({
+      method: 'POST',
+      url: '/api/v1/users',
+      headers: bearer(),
+      payload: { login: loginName, password: 'keyrmpass1' },
+    });
+    const user = createRes.json().data;
+    const cookie = (await login(loginName, 'keyrmpass1')).cookies.find(
+      (c) => c.name === 'pks_session',
+    );
+    const authed = { cookie: `pks_session=${cookie!.value}` };
+    const keyId = randomUUID();
+    db.insert(schema.webauthnCredentials)
+      .values({
+        id: keyId,
+        userId: user.id,
+        publicKey: 'ZmFrZQ==',
+        counter: 0,
+        label: 'only key',
+        createdAt: Math.floor(Date.now() / 1000),
+      })
+      .run();
+
+    const wrongRes = await server.inject({
+      method: 'DELETE',
+      url: `/api/v1/me/2fa/webauthn/${keyId}`,
+      headers: authed,
+      payload: { password: 'nope' },
+    });
+    expect(wrongRes.statusCode).toBe(401);
+    // A credential mistake must not be reported as session expiry.
+    expect(wrongRes.json().error?.code).toBe('INVALID_CREDENTIAL');
+
+    const removeRes = await server.inject({
+      method: 'DELETE',
+      url: `/api/v1/me/2fa/webauthn/${keyId}`,
+      headers: authed,
+      payload: { password: 'keyrmpass1' },
+    });
+    expect(removeRes.statusCode).toBe(200);
+
+    // No second factor left: the password alone signs in again.
+    const loginRes = await login(loginName, 'keyrmpass1');
+    expect(loginRes.statusCode).toBe(200);
+    expect(loginRes.cookies.find((c) => c.name === 'pks_session')).toBeDefined();
+  });
 });

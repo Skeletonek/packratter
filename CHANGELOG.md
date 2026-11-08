@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.1 — 2026-11-08
+
+### Fixes
+
+- Fixed removal of the last security key being refused.
+- Fixed wrong password or authenticator code redirecting to the login page instead of showing an error.
+- Fixed name prompt not appearing when registering a new security key.
+
 ## 0.8.0 — 2026-11-07
 
 ### Changes
@@ -8,7 +16,7 @@
 - Session list on the Account page.
 - API keys can expire
 - Two-factor sign-in for local accounts: authenticator apps (TOTP) and security keys (WebAuthn).
-- Add importing your own key at repository creation or replace a repository's key. 
+- Add importing your own key at repository creation or replace a repository's key.
 - Support passphrase protected GPG keys
 - Old jobs and audit entries are cleaned up automatically
 - SSO can require verified emails before linking accounts

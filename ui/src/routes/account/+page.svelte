@@ -322,6 +322,7 @@
     });
     if (!res.ok) {
       handleApiError('KEY_REMOVE_FAILED', await res.json());
+      return;
     }
     await load2fa();
   }

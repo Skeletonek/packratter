@@ -419,7 +419,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       throw new AppError('BAD_REQUEST', 'this account has no local password', 400);
     }
     if (!(await verifyPassword(user.passHash, body.current))) {
-      throw new AppError('UNAUTHORIZED', 'Wrong current password', 401);
+      throw new AppError('INVALID_CREDENTIAL', 'Wrong current password', 401);
     }
     db.update(schema.users)
       .set({ passHash: await hashPassword(body.next) })
@@ -475,8 +475,13 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     password: string | undefined,
   ): Promise<void> {
     if (user.passHash === null) return;
-    if (password === undefined || !(await verifyPassword(user.passHash, password))) {
-      throw new AppError('UNAUTHORIZED', 'Password confirmation required', 401);
+    // INVALID_CREDENTIAL, not UNAUTHORIZED: a wrong password here must show an
+    // error in place, not be mistaken for session expiry (which logs the user out).
+    if (password === undefined) {
+      throw new AppError('INVALID_CREDENTIAL', 'Password confirmation required', 401);
+    }
+    if (!(await verifyPassword(user.passHash, password))) {
+      throw new AppError('INVALID_CREDENTIAL', 'Wrong password', 401);
     }
   }
 
@@ -507,7 +512,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     }
     const step = user.totpSecret === null ? null : matchTotpStep(user.totpSecret, body.code);
     if (step === null) {
-      throw new AppError('UNAUTHORIZED', 'Wrong authentication code', 401);
+      throw new AppError('INVALID_CREDENTIAL', 'Wrong authentication code', 401);
     }
     // Codes are issued here but TOTP stays off until the user confirms the
     // codes are saved — enrollment must never outlive a lost backup.
@@ -576,7 +581,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       user.passHash !== null &&
       (await verifyPassword(user.passHash, body.password));
     if (!byCode && !byRecovery && !byPassword) {
-      throw new AppError('UNAUTHORIZED', 'Wrong authentication code or password', 401);
+      throw new AppError('INVALID_CREDENTIAL', 'Wrong authentication code or password', 401);
     }
     db.update(schema.users)
       .set({ totpSecret: null, totpEnabled: false, totpRecoveryCodes: null })
@@ -610,7 +615,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       user.passHash !== null &&
       (await verifyPassword(user.passHash, body.password));
     if (!byCode && !byPassword) {
-      throw new AppError('UNAUTHORIZED', 'Wrong authentication code or password', 401);
+      throw new AppError('INVALID_CREDENTIAL', 'Wrong authentication code or password', 401);
     }
     const { codes, stored } = issueRecoveryCodes();
     db.update(schema.users)
@@ -650,13 +655,13 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     const challenge = clientChallenge(registration);
     const bound = challenge ? takeChallenge(challenge) : null;
     if (!bound || bound.kind !== 'register' || bound.userId !== user.id) {
-      throw new AppError('UNAUTHORIZED', 'Registration expired, start again', 401);
+      throw new AppError('BAD_REQUEST', 'Registration expired, start again', 400);
     }
     let result: Awaited<ReturnType<typeof verifyRegistration>>;
     try {
       result = await verifyRegistration(registration, challenge!, ceremonyOrigin(request));
     } catch {
-      throw new AppError('UNAUTHORIZED', 'Security key registration failed', 401);
+      throw new AppError('INVALID_CREDENTIAL', 'Security key registration failed', 401);
     }
     db.insert(schema.webauthnCredentials)
       .values({
@@ -695,24 +700,8 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     if (!row) {
       throw new AppError('NOT_FOUND', 'security key not found', 404);
     }
-    const keyCount = db
-      .select()
-      .from(schema.webauthnCredentials)
-      .where(eq(schema.webauthnCredentials.userId, user.id))
-      .all().length;
-    if (
-      keyCount === 1 &&
-      !user.totpEnabled &&
-      parseStoredHashes(user.totpRecoveryCodes).length === 0
-    ) {
-      // Removing the last factor would silently drop the account back to
-      // password-only; make that an explicit choice via TOTP disable instead.
-      throw new AppError(
-        'CONFLICT',
-        'this is your only second factor; enable TOTP or set a password first',
-        409,
-      );
-    }
+    // No lockout guard: security keys are second factors only. Removing the
+    // last one falls back to password (or SSO) sign-in, which stays usable.
     db.delete(schema.webauthnCredentials).where(eq(schema.webauthnCredentials.id, id)).run();
     recordAudit(
       request,

@@ -29,7 +29,10 @@
   }
 </script>
 
-<dialog bind:this={dialog} class="rounded-3 shadow" on:close={cancel}>
+<!-- on:cancel, not on:close: close() fires the close event as a queued task, so
+     with on:close a dialog opened right after the previous one (the label prompt
+     following the password prompt) would be cancelled by the lingering event. -->
+<dialog bind:this={dialog} class="rounded-3 shadow" on:cancel={cancel}>
   {#if current}
     <form
       class="modal-content"
